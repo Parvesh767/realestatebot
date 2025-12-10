@@ -1,0 +1,50 @@
+<html xmlns:th="http://www.thymeleaf.org"
+      th:replace="layout/base :: layout(~{::content})">
+
+<th:block th:fragment="content">
+
+
+
+        <h2 th:text="${propertyId} != null ? 'Edit Property' : 'Add Property'"></h2>
+
+        <form th:action="${propertyId} != null ? @{/admin/properties/{id}(id=${propertyId})} : @{/admin/properties}"
+              th:object="${property}"
+              method="post">
+
+            <div class="mb-3">
+                <label class="form-label">Title</label>
+                <input th:field="*{title}" class="form-control"/>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">Area</label>
+                <input th:field="*{area}" class="form-control"/>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">Price</label>
+                <input th:field="*{price}" type="number" class="form-control"/>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">BHK</label>
+                <input th:field="*{bhk}" class="form-control"/>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">Description</label>
+                <textarea th:field="*{description}" class="form-control"></textarea>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">Photos (CSV URLs)</label>
+                <input th:field="*{photosCsv}" class="form-control"/>
+            </div>
+
+            <button class="btn btn-success">Save</button>
+            <a href="/admin/properties" class="btn btn-secondary">Cancel</a>
+        </form>
+    </div>
+
+</th:block>
+</html>
