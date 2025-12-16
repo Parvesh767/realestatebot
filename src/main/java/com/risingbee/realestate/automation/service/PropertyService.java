@@ -1,20 +1,22 @@
 package com.risingbee.realestate.automation.service;
 
-import com.risingbee.realestate.automation.domain.Property;
+import java.util.List;
+
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
 import com.risingbee.realestate.automation.domain.Broker;
+import com.risingbee.realestate.automation.domain.Property;
 import com.risingbee.realestate.automation.dto.PropertyRequestDTO;
 import com.risingbee.realestate.automation.dto.PropertyResponseDTO;
+import com.risingbee.realestate.automation.exception.ResourceNotFoundException;
 import com.risingbee.realestate.automation.mapper.PropertyMapper;
-import com.risingbee.realestate.automation.repo.PropertyRepository;
 import com.risingbee.realestate.automation.repo.BrokerRepository;
+import com.risingbee.realestate.automation.repo.PropertyRepository;
 import com.risingbee.realestate.automation.tenant.BrokerContext;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-
-import java.util.List;
 
 @Slf4j
 @Service
@@ -37,12 +39,12 @@ public class PropertyService {
 
     public PropertyResponseDTO update(Long id, PropertyRequestDTO dto) {
         Property p = repository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Property not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Property not found: " + id));
 
-        // ensure the property belongs to the current broker
         Long currentBrokerId = BrokerContext.id();
+        if (currentBrokerId == null) throw new IllegalStateException("No broker in context");
         if (!p.getBroker().getId().equals(currentBrokerId)) {
-            throw new SecurityException("Property does not belong to current broker");
+            throw new com.risingbee.realestate.automation.exception.AccessDeniedException("Property does not belong to current broker");
         }
 
         p.setTitle(dto.getTitle());
@@ -58,41 +60,40 @@ public class PropertyService {
 
     public PropertyResponseDTO get(Long id) {
         Property p = repository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Property not found"));
-
+                .orElseThrow(() -> new ResourceNotFoundException("Property not found: " + id));
         Long currentBrokerId = BrokerContext.id();
+        if (currentBrokerId == null) throw new IllegalStateException("No broker in context");
         if (!p.getBroker().getId().equals(currentBrokerId)) {
-            throw new SecurityException("Property does not belong to current broker");
+            throw new com.risingbee.realestate.automation.exception.AccessDeniedException("Property does not belong to current broker");
         }
-
         return PropertyMapper.toDTO(p);
     }
 
     public List<PropertyResponseDTO> getAllForCurrentBroker() {
         Long brokerId = BrokerContext.id();
         if (brokerId == null) throw new IllegalStateException("No broker in context");
-        return repository.findByBrokerIdAndActiveTrue(brokerId).stream()
-                .map(PropertyMapper::toDTO)
-                .toList();
+        return repository.findByBrokerIdAndActiveTrue(brokerId).stream().map(PropertyMapper::toDTO).toList();
     }
 
     public void delete(Long id) {
         Property p = repository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Property not found"));
+                .orElseThrow(() -> new ResourceNotFoundException("Property not found: " + id));
         Long brokerId = BrokerContext.id();
+        if (brokerId == null) throw new IllegalStateException("No broker in context");
         if (!p.getBroker().getId().equals(brokerId)) {
-            throw new SecurityException("Property does not belong to current broker");
+            throw new com.risingbee.realestate.automation.exception.AccessDeniedException("Property does not belong to current broker");
         }
         p.setActive(false);
         repository.save(p);
     }
 
-    /**
-     * Find matches for a parsed user requirement. Accepts nulls gracefully.
-     */
+    // Matching method used by WhatsAppService
     public List<Property> findMatches(String bhk, String location, Integer minBudget, Integer maxBudget, Long optionalBrokerId) {
-        Long brokerId = (optionalBrokerId != null) ? optionalBrokerId : BrokerContext.id();
+        Long brokerId = optionalBrokerId != null ? optionalBrokerId : BrokerContext.id();
         if (brokerId == null) throw new IllegalStateException("No broker in context");
+        // normalize empty strings
+        if (location != null && location.isBlank()) location = null;
+        if (bhk != null && bhk.isBlank()) bhk = null;
         return repository.findMatches(brokerId, bhk, location, minBudget, maxBudget);
     }
 }

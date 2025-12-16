@@ -48,7 +48,7 @@ public class PropertyController {
 
     @GetMapping
     public ResponseEntity<List<PropertyResponseDTO>> getAll() {
-        return ResponseEntity.ok(service.getAll());
+        return ResponseEntity.ok(service.getAllForCurrentBroker());
     }
 
     @DeleteMapping("/{id}")

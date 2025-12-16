@@ -72,4 +72,26 @@ public class GlobalExceptionHandler {
         log.error("Unhandled exception", ex);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(error);
     }
+    
+
+    @ExceptionHandler(ResourceNotFoundException.class)
+    public ResponseEntity<?> notFound(ResourceNotFoundException ex) {
+        return ResponseEntity.status(404).body(ex.getMessage());
+    }
+
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<?> denied(AccessDeniedException ex) {
+        return ResponseEntity.status(403).body(ex.getMessage());
+    }
+
+    @ExceptionHandler(IllegalStateException.class)
+    public ResponseEntity<?> illegalState(IllegalStateException ex) {
+        return ResponseEntity.status(400).body(ex.getMessage());
+    }
+
+//    @ExceptionHandler(Exception.class)
+//    public ResponseEntity<?> general(Exception ex, HttpServletRequest req) {
+//        log.error("Unhandled exception for request {} {}", req.getMethod(), req.getRequestURI(), ex);
+//        return ResponseEntity.status(500).body("Internal server error");
+//    }
 }

@@ -28,7 +28,7 @@ public class AdminPropertyController {
     // LIST PAGE
     @GetMapping
     public String listProperties(Model model) {
-        model.addAttribute("properties", service.getAll());
+        model.addAttribute("properties", service.getAllForCurrentBroker());
         return "admin/property/list";
     }
 
