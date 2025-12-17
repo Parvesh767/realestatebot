@@ -35,7 +35,11 @@ public class WhatsAppService {
         }
 
         Optional<String> phoneOpt = extractPhone(payload);
+        
         Optional<String> textOpt  = extractText(payload);
+        
+        
+
 
         if (phoneOpt.isEmpty() || textOpt.isEmpty()) {
             log.warn("Required fields missing from webhook payload");
