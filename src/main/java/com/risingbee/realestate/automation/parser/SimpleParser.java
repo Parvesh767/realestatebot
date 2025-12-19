@@ -3,6 +3,7 @@ package com.risingbee.realestate.automation.parser;
 
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -16,10 +17,14 @@ public class SimpleParser {
     private static final Pattern BHK_PATTERN =
             Pattern.compile("(\\d)\\s*(bhk|BHK)");
 
-    private static final String[] LOCATIONS = {
-            "gurgaon", "gurugram", "sector", "sohna", "dlf"
-    };
-
+    private static final Map<String, String> LOCATION_MAP = Map.of(
+    	    "golf course road", "Golf Course Road",
+    	    "golf", "Golf Course Road",
+    	    "dlf", "DLF",
+    	    "sohna", "Sohna",
+    	    "gurgaon", "Gurgaon",
+    	    "gurugram", "Gurugram"
+    	);
     public static ParsedRequest parse(String message) {
 
         if (message == null || message.isBlank()) {
@@ -64,32 +69,56 @@ public class SimpleParser {
         Integer min = null;
         Integer max = null;
 
-        while (m.find()) {
-            int value = Integer.parseInt(m.group(1));
-
-            if (m.group(2) != null) {
-                value = value * 1000; // k → thousands
-            }
-
-            if (min == null) min = value;
-            else max = value;
+        if (!m.find()) {
+            return new Integer[]{null, null};
         }
 
-        if (min != null && max == null) {
-            max = min;
+        int value = Integer.parseInt(m.group(1));
+        if (m.group(2) != null) {
+            value = value * 1000;
+        }
+
+        // Intent-aware logic
+        if (isUnderIntent(text)) {
+            min = null;
+            max = value;
+        }
+        else if (isAboveIntent(text)) {
+            min = value;
+            max = null;
+        }
+        else {
+            // No intent word → treat as exact or upper bound
+            min = null;
+            max = value;
         }
 
         return new Integer[]{min, max};
     }
 
+
     private static String extractLocation(String text) {
-        for (String loc : LOCATIONS) {
-            if (text.contains(loc)) {
-                return loc;
+        for (var entry : LOCATION_MAP.entrySet()) {
+            if (text.contains(entry.getKey())) {
+                return entry.getValue();
             }
         }
         return null;
     }
+    
+    private static boolean isUnderIntent(String text) {
+        return text.contains("under")
+            || text.contains("below")
+            || text.contains("less than");
+    }
+
+    private static boolean isAboveIntent(String text) {
+        return text.contains("above")
+            || text.contains("over")
+            || text.contains("more than");
+    }
+    
+    
 }
 
 

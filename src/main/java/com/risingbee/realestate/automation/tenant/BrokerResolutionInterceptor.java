@@ -1,16 +1,15 @@
 package com.risingbee.realestate.automation.tenant;
 
-import com.risingbee.realestate.automation.domain.Broker;
+import org.springframework.stereotype.Component;
+import org.springframework.web.servlet.HandlerInterceptor;
+
 import com.risingbee.realestate.automation.repo.BrokerRepository;
+
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Component;
-import org.springframework.web.servlet.HandlerInterceptor;
-
-import java.util.Optional;
 
 /**
  * Resolve broker per request:
@@ -40,16 +39,16 @@ public class BrokerResolutionInterceptor implements HandlerInterceptor {
                 apiKey = request.getParameter(PARAM_BROKER);
             }
 
-            if (apiKey != null && !apiKey.isBlank()) {
-                Optional<Broker> ob = brokerRepository.findByApiKey(apiKey);
-                if (ob.isEmpty()) {
-                    log.warn("Invalid API Key used: {}", apiKey);
-                    response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-                    return false;
-                }
-                BrokerContext.set(ob.get());
-                return true;
-            }
+//            if (apiKey != null && !apiKey.isBlank()) {
+//                Optional<Broker> ob = brokerRepository.findByApiKey(apiKey);
+//                if (ob.isEmpty()) {
+//                    log.warn("Invalid API Key used: {}", apiKey);
+//                    response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+//                    return false;
+//                }
+//                BrokerContext.set(ob.get());
+//                return true;
+//            }
 
             HttpSession session = request.getSession(false);
             if (session != null) {

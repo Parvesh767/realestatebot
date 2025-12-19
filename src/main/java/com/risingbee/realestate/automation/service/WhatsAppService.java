@@ -1,16 +1,24 @@
 package com.risingbee.realestate.automation.service;
 
-
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
 import org.springframework.stereotype.Service;
 
+import com.risingbee.realestate.automation.domain.Broker;
+import com.risingbee.realestate.automation.domain.Lead;
 import com.risingbee.realestate.automation.domain.Property;
 import com.risingbee.realestate.automation.parser.ParsedRequest;
 import com.risingbee.realestate.automation.parser.SimpleParser;
+import com.risingbee.realestate.automation.repo.BrokerRepository;
+import com.risingbee.realestate.automation.repo.LeadRepository;
 import com.risingbee.realestate.automation.tenant.BrokerContext;
+import com.risingbee.realestate.enums.BrokerStatus;
+import com.risingbee.realestate.enums.ConversationState;
 
 import lombok.RequiredArgsConstructor;
 
@@ -22,156 +30,277 @@ import lombok.extern.slf4j.Slf4j;
 @RequiredArgsConstructor
 public class WhatsAppService {
 
-    private final LeadService leadService;
-    private final PropertyService propertyService;
-    private final WhatsAppSender whatsAppSender;
+	private final LeadService leadService;
+	private final PropertyService propertyService;
+	private final WhatsAppSender whatsAppSender;
+	
+	private final BrokerOnboardingServiceImpl brokerOnboardingService;
+	private final BrokerRepository brokerRepository;
 
-    public void handleIncoming(Map<String, Object> payload) {
-        log.info("Handling incoming WhatsApp message...");
+	
+	private static final int FREE_LEAD_LIMIT = 10;
 
-        if (BrokerContext.get() == null) {
-            log.warn("No broker in context — cannot handle incoming message");
-            return;
-        }
+	public void handleIncoming(Map<String, Object> payload) {
 
-        Optional<String> phoneOpt = extractPhone(payload);
-        
-        Optional<String> textOpt  = extractText(payload);
-        
-        
+	    log.info("Handling incoming WhatsApp message...");
+
+	    Optional<String> phoneOpt = extractPhone(payload);
+	    Optional<String> textOpt  = extractText(payload);
+
+	    if (phoneOpt.isEmpty() || textOpt.isEmpty()) {
+	        log.warn("Required fields missing from webhook payload");
+	        return;
+	    }
+
+	    String from = phoneOpt.get();
+	    String text = textOpt.get().trim().toLowerCase();
+
+	    Broker broker = BrokerContext.get();
+	    if (broker == null) {
+	        log.warn("No broker in context");
+	        return;
+	    }
+	    
+	    
+	    if (broker.getConversationState() == ConversationState.NEW) {
+	        whatsAppSender.sendTextMessage(
+	            broker.getPhone(),
+	            "Hi! Thanks for messaging us."
+	        );
+
+	        broker.setConversationState(ConversationState.OPEN);
+	        brokerRepository.save(broker);
+	        return; // 🚨 STOP here
+	    }
+
+	    if (broker.getStatus() == BrokerStatus.ONBOARDING) {
+	    	brokerOnboardingService.handle(broker, text);
+	        return;
+	    }
+	  
+	    if (broker.getStatus() != BrokerStatus.ACTIVE) {
+	        return; // suspended or invalid
+	    }
+
+	    // ✅ YES FLOW (NO parsing, NO lead creation)
+	    if (text.equals("yes")) {
+	        handleYesConfirmation(payload);
+	        return;
+	    }
+
+	    // 🔍 SEARCH FLOW
+	    ParsedRequest parsed = SimpleParser.parse(text);
+
+	    if (!parsed.valid()) {
+	        handleInvalidRequest(parsed, from);
+	        return;
+	    }
+
+	    // ✅ create lead only for real searches
+	    leadService.createFromParsed(
+	            from,
+	            text,
+	            parsed.bhk(),
+	            parsed.minBudget(),
+	            parsed.maxBudget(),
+	            parsed.location()
+	    );
+
+	    List<Property> matches = propertyService.findMatches(
+	            parsed.bhk(),
+	            parsed.location(),
+	            parsed.minBudget(),
+	            parsed.maxBudget(),
+	            broker.getId()
+	    );
+
+	    if (matches.isEmpty()) {
+	        whatsAppSender.sendTextMessage(from,
+	                "I couldn't find matching properties. Try changing budget or location.");
+	        return;
+	    }
+
+	    sendPropertyList(from, matches);
+	}
 
 
-        if (phoneOpt.isEmpty() || textOpt.isEmpty()) {
-            log.warn("Required fields missing from webhook payload");
-            return;
-        }
+	/* ---------------- Defensive JSON extractors ---------------- */
 
-        String from = phoneOpt.get();
-        String text = textOpt.get();
+	private Optional<String> extractPhone(Map<String, Object> payload) {
+		try {
+			return firstMap(payload, "entry").flatMap(entry -> firstMap(entry, "changes"))
+					.flatMap(change -> map(change, "value")).flatMap(value -> firstMap(value, "messages"))
+					.flatMap(msg -> string(msg, "from"));
+		} catch (Exception e) {
+			log.debug("extractPhone failed", e);
+			return Optional.empty();
+		}
+	}
 
-        ParsedRequest parsed = SimpleParser.parse(text);
+	private Optional<String> extractText(Map<String, Object> payload) {
+		try {
+			return firstMap(payload, "entry").flatMap(entry -> firstMap(entry, "changes"))
+					.flatMap(change -> map(change, "value")).flatMap(value -> firstMap(value, "messages"))
+					.flatMap(msg -> map(msg, "text")).flatMap(text -> string(text, "body"));
+		} catch (Exception e) {
+			log.debug("extractText failed", e);
+			return Optional.empty();
+		}
+	}
 
-        // 🚫 RENT-ONLY GUARD (THIS WAS MISSING)
-        if (!parsed.valid()) {
-            log.info("Invalid request detected: {}", parsed.invalidReason());
+	/* ---------------- Small safe helpers ---------------- */
 
-            if ("PURCHASE_BUDGET_NOT_SUPPORTED".equals(parsed.invalidReason())) {
-                whatsAppSender.sendTextMessage(from,
-                        """
-                        I currently help with rental properties only.
-                        Please share your monthly rent budget (e.g. 25k, 30k).
-                        """
-                );
-            } else {
-                whatsAppSender.sendTextMessage(from,
-                        "Sorry, I couldn't understand your request. Please try again."
-                );
-            }
-            return;
-        }
+	private Optional<Map<String, Object>> map(Map<String, Object> src, String key) {
+		Object val = src.get(key);
+		if (val instanceof Map<?, ?> m) {
+			@SuppressWarnings("unchecked")
+			Map<String, Object> cast = (Map<String, Object>) m;
+			return Optional.of(cast);
+		}
+		return Optional.empty();
+	}
 
-        // ✅ Create lead only for valid rent intent
-        leadService.createFromParsed(
-                from,
-                text,
-                parsed.bhk(),
-                parsed.minBudget(),
-                parsed.maxBudget(),
-                parsed.location()
-        );
+	private Optional<Map<String, Object>> firstMap(Map<String, Object> src, String key) {
+		Object val = src.get(key);
+		if (val instanceof List<?> list && !list.isEmpty() && list.get(0) instanceof Map<?, ?> m) {
+			@SuppressWarnings("unchecked")
+			Map<String, Object> cast = (Map<String, Object>) m;
+			return Optional.of(cast);
+		}
+		return Optional.empty();
+	}
 
-        Long brokerId = BrokerContext.id();
+	private Optional<String> string(Map<String, Object> src, String key) {
+		Object val = src.get(key);
+		return (val instanceof String s) ? Optional.of(s) : Optional.empty();
+	}
 
-        List<Property> matches = propertyService.findMatches(
-                parsed.bhk(),
-                parsed.location(),
-                parsed.minBudget(),
-                parsed.maxBudget(),
-                brokerId
-        );
+	private void handleYesConfirmation(Map<String, Object> payload) {
 
-        if (matches.isEmpty()) {
-            whatsAppSender.sendTextMessage(from,
-                    """
-                    I couldn't find matching properties yet.
-                    You can try increasing your budget or changing location.
-                    """
-            );
-            return;
-        }
+		
+		
 
-        // ✅ Return matching property list
-        StringBuilder reply = new StringBuilder(
-                "Here are some matching properties:\n\n"
-        );
+		Optional<String> phoneOpt = extractPhone(payload);
+		if (phoneOpt.isEmpty()) {
+			return;
+		}
 
-        matches.stream()
-                .limit(5) // prevent spam
-                .forEach(p -> {
-                    reply.append("🏠 ").append(p.getTitle()).append('\n')
-                         .append("📍 ").append(p.getArea()).append('\n')
-                         .append("💰 ₹").append(p.getPrice()).append(" / month\n")
-                         .append("---------------------\n");
-                });
+		String phone = phoneOpt.get();
 
-        reply.append("\nReply YES to connect with the broker.");
+		
 
-        whatsAppSender.sendTextMessage(from, reply.toString());
-    }
+	    Long brokerId = BrokerContext.id();
 
-    /* ---------------- Defensive JSON extractors ---------------- */
+	    Instant startOfMonth = LocalDate.now()
+	            .withDayOfMonth(1)
+	            .atStartOfDay(ZoneId.systemDefault())
+	            .toInstant();
 
-    private Optional<String> extractPhone(Map<String, Object> payload) {
-        try {
-            return firstMap(payload, "entry")
-                    .flatMap(entry -> firstMap(entry, "changes"))
-                    .flatMap(change -> map(change, "value"))
-                    .flatMap(value -> firstMap(value, "messages"))
-                    .flatMap(msg -> string(msg, "from"));
-        } catch (Exception e) {
-            log.debug("extractPhone failed", e);
-            return Optional.empty();
-        }
-    }
+	    long usedLeads = LeadRepository.countMonthlyLeads(
+	            brokerId,
+	            startOfMonth
+	    );
 
-    private Optional<String> extractText(Map<String, Object> payload) {
-        try {
-            return firstMap(payload, "entry")
-                    .flatMap(entry -> firstMap(entry, "changes"))
-                    .flatMap(change -> map(change, "value"))
-                    .flatMap(value -> firstMap(value, "messages"))
-                    .flatMap(msg -> map(msg, "text"))
-                    .flatMap(text -> string(text, "body"));
-        } catch (Exception e) {
-            log.debug("extractText failed", e);
-            return Optional.empty();
-        }
-    }
+	    if (usedLeads >= FREE_LEAD_LIMIT) {
+	        whatsAppSender.sendTextMessage(
+	                phone,
+	                """
+	                🚫 Free lead limit reached.
 
-    /* ---------------- Small safe helpers ---------------- */
+	                Please contact the broker directly
+	                or upgrade your plan to receive more enquiries.
+	                """
+	        );
+	        return;
+	    }
+		
+		
+		
+		// 1. Find latest lead for this phone
+		Optional<Lead> latestLeadOpt = leadService.findLatestByPhone(phone);
 
-    private Optional<Map<String, Object>> map(Map<String, Object> src, String key) {
-        Object val = src.get(key);
-        if (val instanceof Map<?, ?> m) {
-            @SuppressWarnings("unchecked")
-            Map<String, Object> cast = (Map<String, Object>) m;
-            return Optional.of(cast);
-        }
-        return Optional.empty();
-    }
+		if (latestLeadOpt.isEmpty()) {
+			whatsAppSender.sendTextMessage(phone, "I couldn’t find a recent enquiry. Please search again.");
+			return;
+		}
 
-    private Optional<Map<String, Object>> firstMap(Map<String, Object> src, String key) {
-        Object val = src.get(key);
-        if (val instanceof List<?> list && !list.isEmpty() && list.get(0) instanceof Map<?, ?> m) {
-            @SuppressWarnings("unchecked")
-            Map<String, Object> cast = (Map<String, Object>) m;
-            return Optional.of(cast);
-        }
-        return Optional.empty();
-    }
+		Lead lead = latestLeadOpt.get();
+		Broker broker = BrokerContext.get();
 
-    private Optional<String> string(Map<String, Object> src, String key) {
-        Object val = src.get(key);
-        return (val instanceof String s) ? Optional.of(s) : Optional.empty();
-    }
+		// 2. Notify broker
+		String brokerMessage = """
+				📢 New Interested Lead
+
+				📞 Phone: %s
+				🏠 Requirement: %s
+				📍 Location: %s
+				💰 Budget: %s
+				""".formatted(phone, lead.getBhk(), lead.getLocation(), formatBudget(lead));
+
+		whatsAppSender.sendTextMessage(broker.getPhone(), brokerMessage);
+
+		// 3. Confirm to user
+		whatsAppSender.sendTextMessage(phone, "✅ Thanks! The broker has been notified and will contact you shortly.");
+	}
+
+	private String formatAmount(Integer amount) {
+		return String.format("%,d", amount);
+	}
+
+	private String formatBudget(Lead lead) {
+
+		Integer min = lead.getMinBudget();
+		Integer max = lead.getMaxBudget();
+
+		if (min == null && max == null) {
+			return "Not specified";
+		}
+
+		if (min != null && max != null && min.equals(max)) {
+			return "₹" + formatAmount(min);
+		}
+
+		if (min != null && max != null) {
+			return "₹" + formatAmount(min) + " – ₹" + formatAmount(max);
+		}
+
+		if (min != null) {
+			return "From ₹" + formatAmount(min);
+		}
+
+		return "Up to ₹" + formatAmount(max);
+	}
+	
+	private void sendPropertyList(String phone, List<Property> matches) {
+
+	    StringBuilder reply = new StringBuilder("Here are some matching properties:\n\n");
+
+	    matches.stream()
+	            .limit(5)
+	            .forEach(p -> reply.append("🏠 ").append(p.getTitle()).append('\n')
+	                    .append("📍 ").append(p.getArea()).append('\n')
+	                    .append("💰 ₹").append(p.getPrice()).append(" / month\n")
+	                    .append("---------------------\n"));
+
+	    reply.append("\nReply YES to connect with the broker.");
+
+	    whatsAppSender.sendTextMessage(phone, reply.toString());
+	}
+
+	
+	private void handleInvalidRequest(ParsedRequest parsed, String phone) {
+
+	    if ("PURCHASE_BUDGET_NOT_SUPPORTED".equals(parsed.invalidReason())) {
+	        whatsAppSender.sendTextMessage(phone,
+	                """
+	                I currently help with rental properties only.
+	                Please share your monthly rent budget (e.g. 25k, 30k).
+	                """
+	        );
+	    } else {
+	        whatsAppSender.sendTextMessage(phone,
+	                "Sorry, I couldn't understand your request. Please try again.");
+	    }
+	}
+
 }

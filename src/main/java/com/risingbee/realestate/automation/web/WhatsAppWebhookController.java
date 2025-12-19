@@ -16,8 +16,11 @@ import org.springframework.web.bind.annotation.RestController;
 import com.risingbee.realestate.automation.domain.Broker;
 import com.risingbee.realestate.automation.parser.WhatsAppPayloadExtractor;
 import com.risingbee.realestate.automation.repo.BrokerRepository;
+import com.risingbee.realestate.automation.service.BrokerService;
 import com.risingbee.realestate.automation.service.WhatsAppService;
 import com.risingbee.realestate.automation.tenant.BrokerContext;
+import com.risingbee.realestate.enums.BrokerOnboardingStep;
+import com.risingbee.realestate.enums.BrokerStatus;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -32,6 +35,7 @@ public class WhatsAppWebhookController {
     private final WhatsAppService whatsAppService;
     private final WhatsAppPayloadExtractor payloadExtractor;
     private final BrokerRepository brokerRepository;
+    private final BrokerService brokerService;
 	
     @Value("${whatsapp.verify-token}")
     private String verifyToken;
@@ -64,9 +68,11 @@ public class WhatsAppWebhookController {
     @PostMapping("/webhook")
     public ResponseEntity<String> receiveMessage(@RequestBody Map<String, Object> payload) {
 
-        try {
+      
             // 1. Extract sender phone from payload
             Optional<String> phoneOpt = payloadExtractor.extractPhone(payload);
+            
+            
 
             if (phoneOpt.isEmpty()) {
                 log.debug("Ignoring non-message webhook event (status/update)");
@@ -79,25 +85,30 @@ public class WhatsAppWebhookController {
             // 2. Resolve broker by phone
             Optional<Broker> brokerOpt = brokerRepository.findByPhone(phone);
 
-            if (brokerOpt.isEmpty()) {
-                log.warn("No broker found for phone = {}", phone);
-                return ResponseEntity.ok("EVENT_RECEIVED");
+            
+            Broker broker = brokerRepository
+                    .findByPhone(phone)
+                    .orElseGet(() -> {
+                        log.info("Creating new broker for phone = {}", phone);
+
+                        Broker b = new Broker();
+                        b.setPhone(phone);
+                        b.setStatus(BrokerStatus.ONBOARDING);
+                        b.setOnboardingStep(BrokerOnboardingStep.START);
+                        return brokerRepository.save(b);
+                    });
+
+            try {
+                // 🔑 THIS IS THE MISSING LINE
+                BrokerContext.set(broker);
+
+                whatsAppService.handleIncoming(payload);
+
+            } finally {
+                // 🧹 CRITICAL: avoid thread leakage
+                BrokerContext.clear();
             }
 
-            // 3. Set broker into context BEFORE service call
-            BrokerContext.set(brokerOpt.get());
-            log.info("Broker resolved in context = {}", brokerOpt.get().getName());
-
-            // 4. Delegate to service
-            whatsAppService.handleIncoming(payload);
-
-        } catch (Exception e) {
-            log.error("Error handling WhatsApp webhook", e);
-        } finally {
-            // 5. ALWAYS clear context
-            BrokerContext.clear();
+            return ResponseEntity.ok("EVENT_RECEIVED");
         }
-
-        return ResponseEntity.ok("EVENT_RECEIVED");
-    }
 }

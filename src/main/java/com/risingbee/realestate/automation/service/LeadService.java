@@ -12,6 +12,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 
 @Slf4j
 @Service
@@ -20,7 +21,7 @@ import java.util.List;
 public class LeadService {
 
     private final LeadRepository leadRepository;
-    private final BrokerRepository brokerRepository;
+   
 
     public Lead createFromParsed(String phone, String rawMessage, String bhk, Integer minBudget, Integer maxBudget, String location) {
         Broker broker = BrokerContext.get();
@@ -45,5 +46,9 @@ public class LeadService {
         Long brokerId = BrokerContext.id();
         if (brokerId == null) throw new IllegalStateException("No broker in context");
         return leadRepository.findByBrokerIdOrderByCreatedAtDesc(brokerId);
+    }
+    
+    public Optional<Lead> findLatestByPhone(String phone) {
+        return leadRepository.findTopByPhoneNumberOrderByCreatedAtDesc(phone);
     }
 }

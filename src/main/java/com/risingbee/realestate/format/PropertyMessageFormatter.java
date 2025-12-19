@@ -24,6 +24,14 @@ public class PropertyMessageFormatter {
         sb.append("Reply *YES* to connect with the broker.");
         return sb.toString();
     }
+    
+    
+    
+
+
+	public String formatAmount(Integer min) {
+		 return String.format("%,d", min);
+	}
 }
 
 

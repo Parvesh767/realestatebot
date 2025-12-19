@@ -1,0 +1,13 @@
+package com.risingbee.realestate.automation.repo;
+
+import java.util.List;
+
+import org.springframework.data.jpa.repository.JpaRepository;
+
+import com.risingbee.realestate.automation.domain.BrokerPreference;
+
+public interface BrokerPreferenceRepository
+extends JpaRepository<BrokerPreference, Long> {
+
+	
+}
