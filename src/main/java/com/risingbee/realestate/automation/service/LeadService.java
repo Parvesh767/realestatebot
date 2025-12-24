@@ -21,12 +21,26 @@ import java.util.Optional;
 public class LeadService {
 
     private final LeadRepository leadRepository;
+    private final BrokerRepository brokerRepository;
    
 
-    public Lead createFromParsed(String phone, String rawMessage, String bhk, Integer minBudget, Integer maxBudget, String location) {
-        Broker broker = BrokerContext.get();
-        if (broker == null) throw new IllegalStateException("No broker in context");
+    public Lead createFromParsed(String phone, String rawMessage, String bhk, Integer minBudget, Integer maxBudget, String location,String city) {
+//        Broker broker = BrokerContext.get();
+//        if (broker == null) throw new IllegalStateException("No broker in context");
 
+        Broker contextBroker = BrokerContext.get();
+        if (contextBroker == null) {
+            throw new IllegalStateException("No broker in context");
+        }
+
+        // 🔒 HARD CHECK
+        Broker broker = brokerRepository
+                .findById(contextBroker.getId())
+                .orElseThrow(() ->
+                    new IllegalStateException(
+                        "Broker not persisted or deleted: " + contextBroker.getId()
+                    )
+                );
         Lead lead = Lead.builder()
                 .phoneNumber(phone)
                 .rawMessage(rawMessage)
@@ -34,6 +48,7 @@ public class LeadService {
                 .minBudget(minBudget)
                 .maxBudget(maxBudget)
                 .location(location)
+                .city(city)
                 .createdAt(Instant.now())
                 .broker(broker)
                 .build();

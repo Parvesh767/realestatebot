@@ -41,7 +41,7 @@ public class Broker {
     private String bhkPreference;    // comma separated
     
     @Enumerated(EnumType.STRING)
-    private ConversationState conversationState;
+    private ConversationState conversationState = ConversationState.NEW;
 
 
     // getters/setters

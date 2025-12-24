@@ -16,7 +16,7 @@ public interface PropertyRepository extends JpaRepository<Property, Long> {
         SELECT *
         FROM properties p
         WHERE p.broker_id = :brokerId
-          AND p.active = true
+          AND p.active = true         
           AND (:bhk IS NULL OR p.bhk = :bhk)
           AND (:area IS NULL OR p.area ILIKE '%' || :area || '%')
           AND (:minBudget IS NULL OR p.price >= :minBudget)
@@ -27,6 +27,7 @@ public interface PropertyRepository extends JpaRepository<Property, Long> {
     )
     List<Property> findMatches(
         @Param("brokerId") Long brokerId,
+        @Param("title") String title,
         @Param("bhk") String bhk,
         @Param("area") String area,
         @Param("minBudget") Integer minBudget,

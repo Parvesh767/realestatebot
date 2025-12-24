@@ -1,60 +1,128 @@
 package com.risingbee.realestate.automation.parser;
 
 
-import lombok.extern.slf4j.Slf4j;
-
+import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+
+import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 public class SimpleParser {
 
     // Budget like: 25k, 30k, 45,000, 50000
     private static final Pattern BUDGET_PATTERN =
-            Pattern.compile("\\b(\\d{2,5})(k|K)?\\b");
+            Pattern.compile("\\b(\\d{2,7})(k|K)?\\b");
 
     private static final Pattern BHK_PATTERN =
-            Pattern.compile("(\\d)\\s*(bhk|BHK)");
+    		Pattern.compile("(\\d+(?:\\.5)?)\\s*(bhk|bedroom|bed)");
 
-    private static final Map<String, String> LOCATION_MAP = Map.of(
+
+     private static final Map<String, String> LOCALITY_ALIASES = Map.of(
     	    "golf course road", "Golf Course Road",
     	    "golf", "Golf Course Road",
     	    "dlf", "DLF",
-    	    "sohna", "Sohna",
-    	    "gurgaon", "Gurgaon",
-    	    "gurugram", "Gurugram"
+    	    "sohna", "Sohna"
     	);
+
+    
+    private static final Map<String, String> CITY_ALIASES = Map.ofEntries(
+    	    Map.entry("gurgaon", "GURGAON"),
+    	    Map.entry("gurugram", "GURGAON"),
+    	    Map.entry("ggn", "GURGAON"),
+
+    	    Map.entry("noida", "NOIDA"),
+    	    Map.entry("greater noida", "NOIDA"),
+
+    	    Map.entry("delhi", "DELHI")
+    	);
+
+    
+    private static final List<String> fillers = List.of(
+    	    "need", "want", "looking", "for", "in", "near", "please", "flat", "house"
+    	);
+
+    
     public static ParsedRequest parse(String message) {
+    	  	
+    	
+    	  if (message == null || message.isBlank()) {
+              return ParsedRequest.empty();
+          }
+    	
+    	String msg = message.toLowerCase();
+    	msg = msg.replaceAll("[^a-z0-9 ]", " ");
+    	msg = msg.replaceAll("\\s+", " ").trim();
+    	
+    	
+    	log.info("Parsing normalized message: {}", msg);
+    	
 
-        if (message == null || message.isBlank()) {
-            return ParsedRequest.empty();
-        }
+    	
+    	String title = extractTitle(msg);
+        String bhk = extractBhk(msg);
+        Integer[] budget = extractBudget(msg);
+        String location = extractLocation(msg);
+    	
+    
+        
+	String city = null;
+    	
+    	for (Map.Entry<String, String> entry : CITY_ALIASES.entrySet()) {
+    	    if (msg.contains(entry.getKey())) {
+    	        city = entry.getValue();   // canonical
+    	        msg = msg.replace(entry.getKey(), "").trim();
+    	        break;
+    	    }
+    	}
 
-        String normalized = message.toLowerCase().trim();
-        log.info("Parsing message: {}", normalized);
+    	
+    	for (String f : fillers) {
+    	    msg = msg.replace(" " + f + " ", " ");
+    	}
+    	
+    	
+    
 
-        // 🚫 Rent-only guard
-        if (normalized.contains("lakh") || normalized.contains("crore")) {
-            return ParsedRequest.invalid(
-                    "PURCHASE_BUDGET_NOT_SUPPORTED"
-            );
-        }
+      
 
-        String bhk = extractBhk(normalized);
-        Integer[] budget = extractBudget(normalized);
-        String location = extractLocation(normalized);
+//        String normalized = message.toLowerCase().trim();
+//        log.info("Parsing message: {}", normalized);
+//
+//        // 🚫 Rent-only guard
+//        if (normalized.contains("lakh") || normalized.contains("crore")) {
+//            return ParsedRequest.invalid(
+//                    "PURCHASE_BUDGET_NOT_SUPPORTED"
+//            );
+//        }
+//	
+        
+        
+        
+        log.info(
+        	    "Parsed intent → city={}, bhk={}, minBudget={}, maxBudget={}, location={}",
+        	    city, bhk, budget[0], budget[1], location
+        	);
 
         return new ParsedRequest(
+        		title,
                 bhk,
                 budget[0],
                 budget[1],
                 location,
+                city,
                 true,
                 null
         );
     }
 
+    
+    private static String extractTitle(String text) {
+    	
+    	return extractBhk(text) + extractLocation(text);
+    	
+    }
     private static String extractBhk(String text) {
         Matcher m = BHK_PATTERN.matcher(text);
         if (m.find()) {
@@ -98,7 +166,7 @@ public class SimpleParser {
 
 
     private static String extractLocation(String text) {
-        for (var entry : LOCATION_MAP.entrySet()) {
+        for (var entry : LOCALITY_ALIASES.entrySet()) {
             if (text.contains(entry.getKey())) {
                 return entry.getValue();
             }

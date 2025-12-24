@@ -88,12 +88,14 @@ public class PropertyService {
     }
 
     // Matching method used by WhatsAppService
-    public List<Property> findMatches(String bhk, String location, Integer minBudget, Integer maxBudget, Long optionalBrokerId) {
+    public List<Property> findMatches(String title , String bhk, String city, Integer minBudget, Integer maxBudget, Long optionalBrokerId) {
         Long brokerId = optionalBrokerId != null ? optionalBrokerId : BrokerContext.id();
         if (brokerId == null) throw new IllegalStateException("No broker in context");
         // normalize empty strings
-        if (location != null && location.isBlank()) location = null;
+     
+        if (city != null && city.isBlank()) city = null ;
+//        if(city != null && city.isBlank()) city = null;
         if (bhk != null && bhk.isBlank()) bhk = null;
-        return repository.findMatches(brokerId, bhk, location, minBudget, maxBudget);
+        return repository.findMatches(brokerId, title ,bhk, city, minBudget, maxBudget);
     }
 }

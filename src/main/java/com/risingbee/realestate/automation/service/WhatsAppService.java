@@ -14,11 +14,11 @@ import com.risingbee.realestate.automation.domain.Lead;
 import com.risingbee.realestate.automation.domain.Property;
 import com.risingbee.realestate.automation.parser.ParsedRequest;
 import com.risingbee.realestate.automation.parser.SimpleParser;
+import com.risingbee.realestate.automation.parser.WhatsAppPayloadExtractor;
 import com.risingbee.realestate.automation.repo.BrokerRepository;
 import com.risingbee.realestate.automation.repo.LeadRepository;
 import com.risingbee.realestate.automation.tenant.BrokerContext;
 import com.risingbee.realestate.enums.BrokerStatus;
-import com.risingbee.realestate.enums.ConversationState;
 
 import lombok.RequiredArgsConstructor;
 
@@ -32,9 +32,9 @@ public class WhatsAppService {
 
 	private final LeadService leadService;
 	private final PropertyService propertyService;
-	private final WhatsAppSender whatsAppSender;
-	
-	private final BrokerOnboardingServiceImpl brokerOnboardingService;
+	private final WhatsAppSender whatsAppSender;	
+	private final BrokerOnboardingServiceImpl brokerOnboardingService;	
+	private final WhatsAppPayloadExtractor extractor;	
 	private final BrokerRepository brokerRepository;
 
 	
@@ -44,9 +44,10 @@ public class WhatsAppService {
 
 	    log.info("Handling incoming WhatsApp message...");
 
-	    Optional<String> phoneOpt = extractPhone(payload);
-	    Optional<String> textOpt  = extractText(payload);
+	    Optional<String> phoneOpt = extractor.extractPhone(payload);
+	    Optional<String> textOpt  = extractor.extractText(payload);
 
+	    
 	    if (phoneOpt.isEmpty() || textOpt.isEmpty()) {
 	        log.warn("Required fields missing from webhook payload");
 	        return;
@@ -59,18 +60,6 @@ public class WhatsAppService {
 	    if (broker == null) {
 	        log.warn("No broker in context");
 	        return;
-	    }
-	    
-	    
-	    if (broker.getConversationState() == ConversationState.NEW) {
-	        whatsAppSender.sendTextMessage(
-	            broker.getPhone(),
-	            "Hi! Thanks for messaging us."
-	        );
-
-	        broker.setConversationState(ConversationState.OPEN);
-	        brokerRepository.save(broker);
-	        return; // 🚨 STOP here
 	    }
 
 	    if (broker.getStatus() == BrokerStatus.ONBOARDING) {
@@ -90,11 +79,38 @@ public class WhatsAppService {
 
 	    // 🔍 SEARCH FLOW
 	    ParsedRequest parsed = SimpleParser.parse(text);
+	    
+	    
+	    boolean hasSearchIntent =
+	            parsed.bhk() != null &&
+	            (parsed.minBudget() != null || parsed.maxBudget() != null) &&
+	            (parsed.city() != null || parsed.location() != null);
+
+	    if (!hasSearchIntent) {
+	        log.info("No search intent detected. Skipping lead creation.");
+	        return;
+	    }
+	    
+//	    if (!parsed.hasSearchIntent()) {
+//	        log.info("No search intent detected. Skipping lead creation.");
+//	        whatsAppSender.sendTextMessage(
+//	            from,
+//	            "Please share your requirement, e.g. 2 BHK rent in Gurgaon 30k"
+//	        );
+//	        return;
+//	    }
+	    
 
 	    if (!parsed.valid()) {
 	        handleInvalidRequest(parsed, from);
 	        return;
 	    }
+	    
+	    
+	    Long brokerId = broker.getId();
+
+	    log.info("Context brokerId = {}", brokerId);
+	    log.info("DB existsById = {}", brokerRepository.existsById(brokerId));
 
 	    // ✅ create lead only for real searches
 	    leadService.createFromParsed(
@@ -103,16 +119,32 @@ public class WhatsAppService {
 	            parsed.bhk(),
 	            parsed.minBudget(),
 	            parsed.maxBudget(),
-	            parsed.location()
+	            parsed.location(),
+	            parsed.city()
 	    );
 
 	    List<Property> matches = propertyService.findMatches(
-	            parsed.bhk(),
-	            parsed.location(),
+	    		parsed.title(),
+	    		parsed.bhk(),
+	            parsed.city(),
 	            parsed.minBudget(),
 	            parsed.maxBudget(),
+//	            parsed.city(),
 	            broker.getId()
+	            
 	    );
+	    
+	    
+	    log.warn(
+	    	    "INTENT CHECK  → title={} bhk={}, min={}, max={}, city={}, location={}",
+	    	    
+	    	    parsed.title(),    
+	    	    parsed.bhk(),
+	    	    parsed.minBudget(),
+	    	    parsed.maxBudget(),
+	    	    parsed.city(),
+	    	    parsed.location()
+	    	);
 
 	    if (matches.isEmpty()) {
 	        whatsAppSender.sendTextMessage(from,
@@ -120,67 +152,18 @@ public class WhatsAppService {
 	        return;
 	    }
 
+	    
 	    sendPropertyList(from, matches);
 	}
 
-
+	
+	
 	/* ---------------- Defensive JSON extractors ---------------- */
 
-	private Optional<String> extractPhone(Map<String, Object> payload) {
-		try {
-			return firstMap(payload, "entry").flatMap(entry -> firstMap(entry, "changes"))
-					.flatMap(change -> map(change, "value")).flatMap(value -> firstMap(value, "messages"))
-					.flatMap(msg -> string(msg, "from"));
-		} catch (Exception e) {
-			log.debug("extractPhone failed", e);
-			return Optional.empty();
-		}
-	}
-
-	private Optional<String> extractText(Map<String, Object> payload) {
-		try {
-			return firstMap(payload, "entry").flatMap(entry -> firstMap(entry, "changes"))
-					.flatMap(change -> map(change, "value")).flatMap(value -> firstMap(value, "messages"))
-					.flatMap(msg -> map(msg, "text")).flatMap(text -> string(text, "body"));
-		} catch (Exception e) {
-			log.debug("extractText failed", e);
-			return Optional.empty();
-		}
-	}
-
-	/* ---------------- Small safe helpers ---------------- */
-
-	private Optional<Map<String, Object>> map(Map<String, Object> src, String key) {
-		Object val = src.get(key);
-		if (val instanceof Map<?, ?> m) {
-			@SuppressWarnings("unchecked")
-			Map<String, Object> cast = (Map<String, Object>) m;
-			return Optional.of(cast);
-		}
-		return Optional.empty();
-	}
-
-	private Optional<Map<String, Object>> firstMap(Map<String, Object> src, String key) {
-		Object val = src.get(key);
-		if (val instanceof List<?> list && !list.isEmpty() && list.get(0) instanceof Map<?, ?> m) {
-			@SuppressWarnings("unchecked")
-			Map<String, Object> cast = (Map<String, Object>) m;
-			return Optional.of(cast);
-		}
-		return Optional.empty();
-	}
-
-	private Optional<String> string(Map<String, Object> src, String key) {
-		Object val = src.get(key);
-		return (val instanceof String s) ? Optional.of(s) : Optional.empty();
-	}
-
-	private void handleYesConfirmation(Map<String, Object> payload) {
-
-		
+	private void handleYesConfirmation(Map<String, Object> payload) {	
 		
 
-		Optional<String> phoneOpt = extractPhone(payload);
+		Optional<String> phoneOpt = extractor.extractPhone(payload);
 		if (phoneOpt.isEmpty()) {
 			return;
 		}
@@ -241,6 +224,7 @@ public class WhatsAppService {
 
 		// 3. Confirm to user
 		whatsAppSender.sendTextMessage(phone, "✅ Thanks! The broker has been notified and will contact you shortly.");
+		
 	}
 
 	private String formatAmount(Integer amount) {
@@ -277,7 +261,9 @@ public class WhatsAppService {
 
 	    matches.stream()
 	            .limit(5)
-	            .forEach(p -> reply.append("🏠 ").append(p.getTitle()).append('\n')
+	            .forEach(p -> reply.append("🏠 ").append(p.getBhk()).append("\n")
+	            	    .append((p.getTitle() == null || p.getTitle().isBlank()) ? p.getBhk() : p.getTitle())
+	            	    .append('\n')
 	                    .append("📍 ").append(p.getArea()).append('\n')
 	                    .append("💰 ₹").append(p.getPrice()).append(" / month\n")
 	                    .append("---------------------\n"));

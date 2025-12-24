@@ -1,6 +1,5 @@
 package com.risingbee.realestate.automation.web;
 
-
 import java.util.Map;
 import java.util.Optional;
 
@@ -21,94 +20,101 @@ import com.risingbee.realestate.automation.service.WhatsAppService;
 import com.risingbee.realestate.automation.tenant.BrokerContext;
 import com.risingbee.realestate.enums.BrokerOnboardingStep;
 import com.risingbee.realestate.enums.BrokerStatus;
+import com.risingbee.realestate.enums.ConversationState;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-@Slf4j                         // Lombok: adds a Logger → log.info(), log.error(), etc.
-@RestController               // Spring: marks class as REST endpoint handler
-@RequestMapping("/api/whatsapp") // Base URL for all WhatsApp endpoints
-@RequiredArgsConstructor      // Lombok: generates constructor for final fields (DI)
-public class WhatsAppWebhookController {
+    @Slf4j                         // Lombok: adds a Logger → log.info(), log.error(), etc.
+    @RestController               // Spring: marks class as REST endpoint handler
+    @RequestMapping("/api/whatsapp") // Base URL for all WhatsApp endpoints
+    @RequiredArgsConstructor      // Lombok: generates constructor for final fields (DI)
+    public class WhatsAppWebhookController {
 
 
-    private final WhatsAppService whatsAppService;
-    private final WhatsAppPayloadExtractor payloadExtractor;
-    private final BrokerRepository brokerRepository;
-    private final BrokerService brokerService;
-	
-    @Value("${whatsapp.verify-token}")
-    private String verifyToken;
-
-    // -----------------------------------------------
-    // STEP 4.1 — Webhook Verification (GET)
-    // -----------------------------------------------
-    @GetMapping("/webhook")
-    public ResponseEntity<String> verifyWebhook(
-            @RequestParam(name = "hub.mode", required = false) String mode,
-            @RequestParam(name = "hub.challenge", required = false) String challenge,
-            @RequestParam(name = "hub.verify_token", required = false) String token
-    ) {
+        private final WhatsAppService whatsAppService;
+        private final WhatsAppPayloadExtractor payloadExtractor;
+        private final BrokerRepository brokerRepository;
+        private final BrokerService brokerService;
     	
-    	log.info("Broker resolved in context = {}", BrokerContext.get());
-        log.info("Webhook verification request → mode={}, token={}", mode, token);
+        @Value("${whatsapp.verify-token}")
+        private String verifyToken;
 
-        if ("subscribe".equals(mode) && verifyToken.equals(token)) {
-            log.info("Webhook verified successfully.");
-            return ResponseEntity.ok(challenge);
-        }
+        // -----------------------------------------------
+        // STEP 4.1 — Webhook Verification (GET)
+        // -----------------------------------------------
+        @GetMapping("/webhook")
+        public ResponseEntity<String> verifyWebhook(
+                @RequestParam(name = "hub.mode", required = false) String mode,
+                @RequestParam(name = "hub.challenge", required = false) String challenge,
+                @RequestParam(name = "hub.verify_token", required = false) String token
+        ) {
+        	
+        	log.info("Broker resolved in context = {}", BrokerContext.get());
+            log.info("Webhook verification request → mode={}, token={}", mode, token);
 
-        log.warn("Webhook verification failed.");
-        return ResponseEntity.status(403).body("Verification failed");
-    }
-
-    // -----------------------------------------------
-    // STEP 4.2 — Receive WhatsApp Messages (POST)
-    // -----------------------------------------------
-    @PostMapping("/webhook")
-    public ResponseEntity<String> receiveMessage(@RequestBody Map<String, Object> payload) {
-
-      
-            // 1. Extract sender phone from payload
-            Optional<String> phoneOpt = payloadExtractor.extractPhone(payload);
-            
-            
-
-            if (phoneOpt.isEmpty()) {
-                log.debug("Ignoring non-message webhook event (status/update)");
-                return ResponseEntity.ok("EVENT_RECEIVED");
+            if ("subscribe".equals(mode) && verifyToken.equals(token)) {
+                log.info("Webhook verified successfully.");
+                return ResponseEntity.ok(challenge);
             }
 
-            String phone = phoneOpt.get();
-            log.info("Incoming WhatsApp message from phone = {}", phone);
+            log.warn("Webhook verification failed.");
+            return ResponseEntity.status(403).body("Verification failed");
+        }
 
-            // 2. Resolve broker by phone
-            Optional<Broker> brokerOpt = brokerRepository.findByPhone(phone);
+        // -----------------------------------------------
+        // STEP 4.2 — Receive WhatsApp Messages (POST)	
+        // -----------------------------------------------
+        @PostMapping("/webhook")
+        public ResponseEntity<String> receiveMessage(@RequestBody Map<String, Object> payload) {
+        	
+        	Broker ctx = BrokerContext.get();
+        	log.info("ENTRY BrokerContext = {}", ctx == null ? "null" : ctx.getId());
+        	
 
+            Optional<String> phone = payloadExtractor.extractPhone(payload);
+            Optional<String> text  = payloadExtractor.extractText(payload);
+
+            if (phone.isEmpty() || text.isEmpty()) {                
+            	  log.warn("No phone number found or wrong number.");
+            	return ResponseEntity.ok("EVENT_RECEIVED");
+            }
             
             Broker broker = brokerRepository
-                    .findByPhone(phone)
-                    .orElseGet(() -> {
-                        log.info("Creating new broker for phone = {}", phone);
+                    .findByPhone(phone.get())
+                    .orElseGet(() -> createNewBroker(phone.get()));
 
-                        Broker b = new Broker();
-                        b.setPhone(phone);
-                        b.setStatus(BrokerStatus.ONBOARDING);
-                        b.setOnboardingStep(BrokerOnboardingStep.START);
-                        return brokerRepository.save(b);
-                    });
-
+            if (broker.getId() == null) {
+                throw new IllegalStateException("Attempting to set non-persisted broker in context");
+            }
+            
             try {
-                // 🔑 THIS IS THE MISSING LINE
                 BrokerContext.set(broker);
-
                 whatsAppService.handleIncoming(payload);
-
             } finally {
-                // 🧹 CRITICAL: avoid thread leakage
                 BrokerContext.clear();
+                log.info("CLEARED BrokerContext");
+            
             }
 
             return ResponseEntity.ok("EVENT_RECEIVED");
         }
-}
+        
+        private Broker createNewBroker(String phone) {
+
+            log.info("Creating new broker for phone = {}", phone);
+
+            Broker broker = new Broker();
+            broker.setPhone(phone);
+            broker.setStatus(BrokerStatus.ONBOARDING);
+            broker.setOnboardingStep(BrokerOnboardingStep.START);
+            broker.setConversationState(ConversationState.NEW); // if you have it
+
+            Broker saved = brokerRepository.save(broker);
+
+            log.info("New broker created with id = {}", saved.getId());
+
+            return saved;
+        }
+
+    }

@@ -23,6 +23,8 @@ public class BrokerOnboardingServiceImpl implements com.risingbee.realestate.aut
     @Transactional
     public void handle(Broker broker, String message) {
 
+        if (message == null) return;
+
         String text = message.trim().toLowerCase();
 
         switch (broker.getOnboardingStep()) {
@@ -42,21 +44,49 @@ public class BrokerOnboardingServiceImpl implements com.risingbee.realestate.aut
             }
         }
     }
+    
+    
+    private void saveAndAsk(Broker broker, String message) {
+        save(broker);
+        send(broker, message);
+    }
+    
+ 
+    
+    private void save(Broker broker) {
+        brokerRepository.save(broker);
+        log.debug(
+            "Broker {} saved | status={} | step={}",
+            broker.getId(),
+            broker.getStatus(),
+            broker.getOnboardingStep()
+        );
+    }
+    
+    private void send(Broker broker, String message) {
+        log.info("Sending onboarding message to {} → {}", broker.getPhone(), message);
+        whatsAppSender.sendTextMessage(broker.getPhone(), message);
+    }
+    
+    
+    
+    
+  
 
     /* ---------------- STEP HANDLERS ---------------- */
 
     private void askLocation(Broker broker) {
-        whatsAppSender.sendTextMessage(
-                broker.getPhone(),
-                """
-                👋 Welcome!
 
-                Which areas do you deal in?
-                (Example: Gurgaon, Sector 56, Golf Course Road)
-                """
-        );
         broker.setOnboardingStep(BrokerOnboardingStep.AREAS);
-        brokerRepository.save(broker);
+        saveAndAsk(
+            broker,
+            """
+            👋 Welcome!
+
+            Which areas do you deal in?
+            (Example: Gurgaon, Sector 56, Golf Course Road)
+            """
+        );
     }
 
     private void handleLocation(Broker broker, String text) {
