@@ -124,15 +124,12 @@ public class WhatsAppService {
 	    );
 
 	    List<Property> matches = propertyService.findMatches(
-	    		parsed.title(),
-	    		parsed.bhk(),
-	            parsed.city(),
-	            parsed.minBudget(),
-	            parsed.maxBudget(),
-//	            parsed.city(),
-	            broker.getId()
-	            
-	    );
+	    	    parsed.bhk(),
+	    	    parsed.location(),   // ✅ NOT city
+	    	    parsed.minBudget(),
+	    	    parsed.maxBudget(),
+	    	    broker.getId()
+	    	);
 	    
 	    
 	    log.warn(
