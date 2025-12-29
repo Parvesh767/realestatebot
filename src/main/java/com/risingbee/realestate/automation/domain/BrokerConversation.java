@@ -4,62 +4,58 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.hibernate.annotations.JdbcTypeCode;
-import org.hibernate.type.SqlTypes;
-
 import com.risingbee.realestate.converter.StringListJsonConverter;
+import com.risingbee.realestate.enums.AddPropertyStep;
+import com.risingbee.realestate.flow.ConversationFlow;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
-import jakarta.persistence.FetchType;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
+import jakarta.persistence.UniqueConstraint;
 import lombok.Getter;
-import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 @Entity
-@Table(name = "properties")
+@Table(
+    name = "broker_conversation",
+    uniqueConstraints = @UniqueConstraint(columnNames = {"broker_id", "flow"})
+)
 @Getter @Setter
-@Builder
-@NoArgsConstructor
-@AllArgsConstructor
-public class Property {
+public class BrokerConversation {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "broker_id", nullable = false)
-    private Broker broker;
+    @Column(name = "broker_id", nullable = false)
+    private Long brokerId;
 
-    private String title;
+    @Enumerated(EnumType.STRING)
+    private ConversationFlow flow;
+
+    @Enumerated(EnumType.STRING)
+    private AddPropertyStep step;
+
     private String bhk;
     private String area;
-    private String city;
     private Integer price;
 
-    @Column(columnDefinition = "text")
-    private String description;
-
-    private String mapLink;
-
     @Column(columnDefinition = "json")
-    @JdbcTypeCode(SqlTypes.JSON)
     @Convert(converter = StringListJsonConverter.class)
     private List<String> photos = new ArrayList<>();
 
-    private boolean active = true;
+    @Column(nullable = false)
+    private Instant updatedAt = Instant.now();
 
-    @Column(nullable = false, updatable = false)
-    private Instant createdAt = Instant.now();
+    /* helpers */
+    public void addPhoto(String url) {
+        photos.add(url);
+    }
 }
 

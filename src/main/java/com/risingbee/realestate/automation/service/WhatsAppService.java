@@ -7,21 +7,25 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 
 import com.risingbee.realestate.automation.domain.Broker;
+import com.risingbee.realestate.automation.domain.BrokerConversation;
 import com.risingbee.realestate.automation.domain.Lead;
 import com.risingbee.realestate.automation.domain.Property;
+import com.risingbee.realestate.automation.dto.MediaInput;
 import com.risingbee.realestate.automation.parser.ParsedRequest;
-import com.risingbee.realestate.automation.parser.SimpleParser;
 import com.risingbee.realestate.automation.parser.WhatsAppPayloadExtractor;
+import com.risingbee.realestate.automation.repo.BrokerConversationRepository;
 import com.risingbee.realestate.automation.repo.BrokerRepository;
 import com.risingbee.realestate.automation.repo.LeadRepository;
 import com.risingbee.realestate.automation.tenant.BrokerContext;
-import com.risingbee.realestate.enums.BrokerStatus;
+import com.risingbee.realestate.flow.ConversationFlow;
+import com.risingbee.realestate.handler.AddPropertyHandler;
+import com.risingbee.realestate.router.MessageRouter;
 
 import lombok.RequiredArgsConstructor;
-
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
@@ -36,122 +40,158 @@ public class WhatsAppService {
 	private final BrokerOnboardingServiceImpl brokerOnboardingService;	
 	private final WhatsAppPayloadExtractor extractor;	
 	private final BrokerRepository brokerRepository;
+	 private final AddPropertyHandler addPropertyHandler;
+	 private final BrokerConversationRepository brokerConversationRepository;
+	
+	  private final MessageRouter messageRouter;
+//	    private final AddPropertyHandler addPropertyHandler;
 
 	
 	private static final int FREE_LEAD_LIMIT = 10;
-
+	
+	
 	public void handleIncoming(Map<String, Object> payload) {
-
-	    log.info("Handling incoming WhatsApp message...");
 
 	    Optional<String> phoneOpt = extractor.extractPhone(payload);
 	    Optional<String> textOpt  = extractor.extractText(payload);
+	    Optional<MediaInput> mediaOpt = extractor.extractImageMedia(payload);
 
-	    
-	    if (phoneOpt.isEmpty() || textOpt.isEmpty()) {
-	        log.warn("Required fields missing from webhook payload");
+	    if (phoneOpt.isEmpty()) {
+	        log.warn("No phone found in payload");
 	        return;
 	    }
 
 	    String from = phoneOpt.get();
-	    String text = textOpt.get().trim().toLowerCase();
+	    String message = textOpt.map(String::trim).orElse("");
 
-	    Broker broker = BrokerContext.get();
-	    if (broker == null) {
-	        log.warn("No broker in context");
-	        return;
-	    }
+	    Broker broker = brokerRepository.findByPhone(from).orElse(null);
+	    if (broker == null) return;
 
-	    if (broker.getStatus() == BrokerStatus.ONBOARDING) {
-	    	brokerOnboardingService.handle(broker, text);
-	        return;
-	    }
-	  
-	    if (broker.getStatus() != BrokerStatus.ACTIVE) {
-	        return; // suspended or invalid
-	    }
+	    BrokerContext.set(broker);
 
-	    // ✅ YES FLOW (NO parsing, NO lead creation)
-	    if (text.equals("yes")) {
-	        handleYesConfirmation(payload);
-	        return;
+	    try {
+	        addPropertyHandler.handle(from, message, mediaOpt);
+	    } finally {
+	        BrokerContext.clear();
 	    }
+	}
 
-	    // 🔍 SEARCH FLOW
-	    ParsedRequest parsed = SimpleParser.parse(text);
-	    
-	    
-	    boolean hasSearchIntent =
-	            parsed.bhk() != null &&
-	            (parsed.minBudget() != null || parsed.maxBudget() != null) &&
-	            (parsed.city() != null || parsed.location() != null);
 
-	    if (!hasSearchIntent) {
-	        log.info("No search intent detected. Skipping lead creation.");
-	        return;
-	    }
-	    
-//	    if (!parsed.hasSearchIntent()) {
-//	        log.info("No search intent detected. Skipping lead creation.");
-//	        whatsAppSender.sendTextMessage(
-//	            from,
-//	            "Please share your requirement, e.g. 2 BHK rent in Gurgaon 30k"
-//	        );
+
+//	public void handleIncoming(Map<String, Object> payload) {
+//
+//	    log.info("Handling incoming WhatsApp message...");
+//
+//	    Optional<String> phoneOpt = extractor.extractPhone(payload);
+//	    Optional<String> textOpt  = extractor.extractText(payload);
+//
+//	    
+//	    if (phoneOpt.isEmpty() || textOpt.isEmpty()) {
+//	        log.warn("Required fields missing from webhook payload");
 //	        return;
 //	    }
-	    
-
-	    if (!parsed.valid()) {
-	        handleInvalidRequest(parsed, from);
-	        return;
-	    }
-	    
-	    
-	    Long brokerId = broker.getId();
-
-	    log.info("Context brokerId = {}", brokerId);
-	    log.info("DB existsById = {}", brokerRepository.existsById(brokerId));
-
-	    // ✅ create lead only for real searches
-	    leadService.createFromParsed(
-	            from,
-	            text,
-	            parsed.bhk(),
-	            parsed.minBudget(),
-	            parsed.maxBudget(),
-	            parsed.location(),
-	            parsed.city()
-	    );
-
-	    List<Property> matches = propertyService.findMatches(
-	    	    parsed.bhk(),
-	    	    parsed.location(),   // ✅ NOT city
-	    	    parsed.minBudget(),
-	    	    parsed.maxBudget(),
-	    	    broker.getId()
-	    	);
-	    
-	    
-	    log.warn(
-	    	    "INTENT CHECK  → title={} bhk={}, min={}, max={}, city={}, location={}",
-	    	    
-	    	    parsed.title(),    
-	    	    parsed.bhk(),
-	    	    parsed.minBudget(),
-	    	    parsed.maxBudget(),
-	    	    parsed.city(),
-	    	    parsed.location()
-	    	);
-
-	    if (matches.isEmpty()) {
-	        whatsAppSender.sendTextMessage(from,
-	                "I couldn't find matching properties. Try changing budget or location.");
-	        return;
-	    }
-
-	    
-	    sendPropertyList(from, matches);
-	}
+//
+//	    String from = phoneOpt.get();
+//	    String text = textOpt.get().trim().toLowerCase();
+//
+//	    Broker broker = BrokerContext.get();
+//	    if (broker == null) {
+//	        log.warn("No broker in context");
+//	        return;
+//	    }
+//	    
+//	    
+//
+//	    if (broker.getStatus() == BrokerStatus.ONBOARDING) {
+//	    	brokerOnboardingService.handle(broker, text);
+//	        return;
+//	    }
+//	  
+//	    if (broker.getStatus() != BrokerStatus.ACTIVE) {
+//	        return; // suspended or invalid
+//	    }
+//
+//	    // ✅ YES FLOW (NO parsing, NO lead creation)
+//	    if (text.equals("yes")) {
+//	        handleYesConfirmation(payload);
+//	        return;
+//	    }
+//
+//	    // 🔍 SEARCH FLOW
+//	    ParsedRequest parsed = SimpleParser.parse(text);
+//	    
+//	    
+//	    boolean hasSearchIntent =
+//	            parsed.bhk() != null &&
+//	            (parsed.minBudget() != null || parsed.maxBudget() != null) &&
+//	            (parsed.city() != null || parsed.location() != null);
+//
+//	    if (!hasSearchIntent) {
+//	        log.info("No search intent detected. Skipping lead creation.");
+//	        return;
+//	    }
+//	    
+////	    if (!parsed.hasSearchIntent()) {
+////	        log.info("No search intent detected. Skipping lead creation.");
+////	        whatsAppSender.sendTextMessage(
+////	            from,
+////	            "Please share your requirement, e.g. 2 BHK rent in Gurgaon 30k"
+////	        );
+////	        return;
+////	    }
+//	    
+//
+//	    if (!parsed.valid()) {
+//	        handleInvalidRequest(parsed, from);
+//	        return;
+//	    }
+//	    
+//	    
+//	    Long brokerId = broker.getId();
+//
+//	    log.info("Context brokerId = {}", brokerId);
+//	    log.info("DB existsById = {}", brokerRepository.existsById(brokerId));
+//
+//	    // ✅ create lead only for real searches
+//	    leadService.createFromParsed(
+//	            from,
+//	            text,
+//	            parsed.bhk(),
+//	            parsed.minBudget(),
+//	            parsed.maxBudget(),
+//	            parsed.location(),
+//	            parsed.city()
+//	    );
+//
+//	    List<Property> matches = propertyService.findMatches(
+//	    	    parsed.bhk(),
+//	    	    parsed.location(),   // ✅ NOT city
+//	    	    parsed.minBudget(),
+//	    	    parsed.maxBudget(),
+//	    	    broker.getId()
+//	    	);
+//	    
+//	    
+//	    log.warn(
+//	    	    "INTENT CHECK  → title={} bhk={}, min={}, max={}, city={}, location={}",
+//	    	    
+//	    	    parsed.title(),    
+//	    	    parsed.bhk(),
+//	    	    parsed.minBudget(),
+//	    	    parsed.maxBudget(),
+//	    	    parsed.city(),
+//	    	    parsed.location()
+//	    	);
+//
+//	    if (matches.isEmpty()) {
+//	        whatsAppSender.sendTextMessage(from,
+//	                "I couldn't find matching properties. Try changing budget or location.");
+//	        return;
+//	    }
+//
+//	    
+//	    sendPropertyList(from, matches);
+//	}
 
 	
 	

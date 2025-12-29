@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.risingbee.realestate.automation.domain.Broker;
+import com.risingbee.realestate.automation.dto.MediaInput;
 import com.risingbee.realestate.automation.parser.WhatsAppPayloadExtractor;
 import com.risingbee.realestate.automation.repo.BrokerRepository;
 import com.risingbee.realestate.automation.service.BrokerService;
@@ -33,7 +34,7 @@ import lombok.extern.slf4j.Slf4j;
 
 
         private final WhatsAppService whatsAppService;
-        private final WhatsAppPayloadExtractor payloadExtractor;
+        private final WhatsAppPayloadExtractor extractor;
         private final BrokerRepository brokerRepository;
         private final BrokerService brokerService;
     	
@@ -66,40 +67,19 @@ import lombok.extern.slf4j.Slf4j;
         // STEP 4.2 — Receive WhatsApp Messages (POST)	
         // -----------------------------------------------
         @PostMapping("/webhook")
-        public ResponseEntity<String> receiveMessage(@RequestBody Map<String, Object> payload) {
-        	
-        	Broker ctx = BrokerContext.get();
-        	log.info("ENTRY BrokerContext = {}", ctx == null ? "null" : ctx.getId());
-        	
+        public ResponseEntity<String> receiveMessage(
+                @RequestBody Map<String, Object> payload
+        ) {
+            log.info("Incoming payload = {}", payload);
 
-            Optional<String> phone = payloadExtractor.extractPhone(payload);
-            Optional<String> text  = payloadExtractor.extractText(payload);
-
-            if (phone.isEmpty() || text.isEmpty()) {                
-            	  log.warn("No phone number found or wrong number.");
-            	return ResponseEntity.ok("EVENT_RECEIVED");
-            }
-            
-            Broker broker = brokerRepository
-                    .findByPhone(phone.get())
-                    .orElseGet(() -> createNewBroker(phone.get()));
-
-            if (broker.getId() == null) {
-                throw new IllegalStateException("Attempting to set non-persisted broker in context");
-            }
-            
-            try {
-                BrokerContext.set(broker);
-                whatsAppService.handleIncoming(payload);
-            } finally {
-                BrokerContext.clear();
-                log.info("CLEARED BrokerContext");
-            
+            if (!extractor.isUserMessageEvent(payload)) {
+                log.debug("Ignoring non-message webhook");
+                return ResponseEntity.ok("EVENT_RECEIVED");
             }
 
+            whatsAppService.handleIncoming(payload);
             return ResponseEntity.ok("EVENT_RECEIVED");
         }
-        
         private Broker createNewBroker(String phone) {
 
             log.info("Creating new broker for phone = {}", phone);
@@ -116,5 +96,7 @@ import lombok.extern.slf4j.Slf4j;
 
             return saved;
         }
+        
+    
 
     }

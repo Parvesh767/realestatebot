@@ -7,6 +7,8 @@ import java.util.Optional;
 
 import org.springframework.stereotype.Component;
 
+import com.risingbee.realestate.automation.dto.MediaInput;
+
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -91,6 +93,72 @@ public class WhatsAppPayloadExtractor {
 		Object val = src.get(key);
 		return (val instanceof String s) ? Optional.of(s) : Optional.empty();
 	}
+
+	
+	@SuppressWarnings("unchecked")
+	public Optional<MediaInput> extractImageMedia(Map<String, Object> payload) {
+
+	    try {
+	        List<Map<String, Object>> entry =
+	            (List<Map<String, Object>>) payload.get("entry");
+	        if (entry == null || entry.isEmpty()) return Optional.empty();
+
+	        List<Map<String, Object>> changes =
+	            (List<Map<String, Object>>) entry.get(0).get("changes");
+	        if (changes == null || changes.isEmpty()) return Optional.empty();
+
+	        Map<String, Object> value =
+	            (Map<String, Object>) changes.get(0).get("value");
+
+	        List<Map<String, Object>> messages =
+	            (List<Map<String, Object>>) value.get("messages");
+	        if (messages == null || messages.isEmpty()) return Optional.empty();
+
+	        Map<String, Object> msg = messages.get(0);
+
+	        if (!"image".equals(msg.get("type"))) {
+	            return Optional.empty();
+	        }
+
+	        Map<String, Object> image =
+	            (Map<String, Object>) msg.get("image");
+
+	        String mediaId = (String) image.get("id");
+	        String mimeType = (String) image.get("mime_type");
+
+	        if (mediaId == null) return Optional.empty();
+
+	        return Optional.of(new MediaInput(mediaId, mimeType));
+
+	    } catch (Exception e) {
+	        log.warn("Failed to extract image media", e);
+	        return Optional.empty();
+	    }
+	}
+	
+    @SuppressWarnings("unchecked")
+    public boolean isUserMessageEvent(Map<String, Object> payload) {
+
+        try {
+            List<Map<String, Object>> entry =
+                (List<Map<String, Object>>) payload.get("entry");
+            if (entry == null || entry.isEmpty()) return false;
+
+            List<Map<String, Object>> changes =
+                (List<Map<String, Object>>) entry.get(0).get("changes");
+            if (changes == null || changes.isEmpty()) return false;
+
+            Map<String, Object> value =
+                (Map<String, Object>) changes.get(0).get("value");
+
+            return value.containsKey("messages");
+
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+
 
 	
 }

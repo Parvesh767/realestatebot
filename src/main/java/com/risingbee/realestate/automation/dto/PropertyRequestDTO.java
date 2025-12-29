@@ -1,29 +1,33 @@
 package com.risingbee.realestate.automation.dto;
 
 
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
-import lombok.Data;
+import java.util.List;
 
-@Data
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+
+@Getter
+@Setter
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class PropertyRequestDTO {
 
-    @NotBlank
     private String title;
-
-    @NotBlank
-    private String area;
-
-    @NotNull
-    private Integer price;
-
-    @NotBlank
     private String bhk;
+    private String area;
+    private String city;
+    private Integer price;
 
     private String description;
     private String mapLink;
 
-    // comma-separated photo URLs for now
-    private String photosCsv;
+    private List<String> photos;
+
+    // Boolean wrapper (important)
+    private Boolean active;
 }
 
