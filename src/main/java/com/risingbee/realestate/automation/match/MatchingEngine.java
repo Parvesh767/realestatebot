@@ -31,11 +31,11 @@ public class MatchingEngine {
         }
 
         // Location match
-        if (req.location() != null && p.getArea() != null) {
-            if (p.getArea().toLowerCase().contains(req.location().toLowerCase())) {
-                score += 30;
-            }
-        }
+//        if (req.location() != null && p.getArea() != null) {
+//            if (p.getArea().toLowerCase().contains(req.location().toLowerCase())) {
+//                score += 30;
+//            }
+//        }
 
         return score;
     }

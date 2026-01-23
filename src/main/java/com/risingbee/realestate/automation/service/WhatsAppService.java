@@ -1,29 +1,30 @@
 package com.risingbee.realestate.automation.service;
 
-import java.time.Instant;
-import java.time.LocalDate;
-import java.time.ZoneId;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 
-import com.risingbee.realestate.automation.domain.Broker;
+import com.risingbee.realestate.automation.actor.Actor;
+import com.risingbee.realestate.automation.actor.ActorContext;
+import com.risingbee.realestate.automation.actor.ActorResolver;
+import com.risingbee.realestate.automation.actor.enums.Capability;
+import com.risingbee.realestate.automation.actor.repo.AccountRepository;
 import com.risingbee.realestate.automation.domain.BrokerConversation;
-import com.risingbee.realestate.automation.domain.Lead;
-import com.risingbee.realestate.automation.domain.Property;
+import com.risingbee.realestate.automation.domain.ProcessedMessage;
 import com.risingbee.realestate.automation.dto.MediaInput;
+import com.risingbee.realestate.automation.interfaces.BrokerOnboardingService;
 import com.risingbee.realestate.automation.parser.ParsedRequest;
+import com.risingbee.realestate.automation.parser.SimpleParser;
 import com.risingbee.realestate.automation.parser.WhatsAppPayloadExtractor;
-import com.risingbee.realestate.automation.repo.BrokerConversationRepository;
-import com.risingbee.realestate.automation.repo.BrokerRepository;
-import com.risingbee.realestate.automation.repo.LeadRepository;
-import com.risingbee.realestate.automation.tenant.BrokerContext;
+import com.risingbee.realestate.automation.repo.ProcessedMessageRepository;
 import com.risingbee.realestate.flow.ConversationFlow;
+import com.risingbee.realestate.flow.ConversationPhase;
+import com.risingbee.realestate.flow.FlowResolver;
+import com.risingbee.realestate.flow.convService.ConversationService;
 import com.risingbee.realestate.handler.AddPropertyHandler;
-import com.risingbee.realestate.router.MessageRouter;
+import com.risingbee.realestate.handler.SearcherSearchHandler;
+import com.risingbee.realestate.handler.SearcherYesHandler;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -34,296 +35,349 @@ import lombok.extern.slf4j.Slf4j;
 @RequiredArgsConstructor
 public class WhatsAppService {
 
-	private final LeadService leadService;
-	private final PropertyService propertyService;
-	private final WhatsAppSender whatsAppSender;	
-	private final BrokerOnboardingServiceImpl brokerOnboardingService;	
-	private final WhatsAppPayloadExtractor extractor;	
-	private final BrokerRepository brokerRepository;
-	 private final AddPropertyHandler addPropertyHandler;
-	 private final BrokerConversationRepository brokerConversationRepository;
-	
-	  private final MessageRouter messageRouter;
-//	    private final AddPropertyHandler addPropertyHandler;
+    private final AccountRepository accountRepository;
 
-	
-	private static final int FREE_LEAD_LIMIT = 10;
-	
-	
-	public void handleIncoming(Map<String, Object> payload) {
+	private final WhatsAppSender whatsAppSender;
 
-	    Optional<String> phoneOpt = extractor.extractPhone(payload);
-	    Optional<String> textOpt  = extractor.extractText(payload);
-	    Optional<MediaInput> mediaOpt = extractor.extractImageMedia(payload);
+	private final ProcessedMessageRepository processedMessageRepository;
 
-	    if (phoneOpt.isEmpty()) {
-	        log.warn("No phone found in payload");
-	        return;
-	    }
+	private final WhatsAppPayloadExtractor extractor;
+	private final AddPropertyHandler addPropertyHandler;
+	private final SearcherSearchHandler searchHandler;
+	private final SearcherYesHandler yesHandler;
+	private final BrokerOnboardingService brokerOnboardingService;
+	private final ConversationService conversationService;
+	private final FlowResolver flowResolver;
+	private final ActorResolver actorResolver;
 
-	    String from = phoneOpt.get();
-	    String message = textOpt.map(String::trim).orElse("");
-
-	    Broker broker = brokerRepository.findByPhone(from).orElse(null);
-	    if (broker == null) return;
-
-	    BrokerContext.set(broker);
-
-	    try {
-	        addPropertyHandler.handle(from, message, mediaOpt);
-	    } finally {
-	        BrokerContext.clear();
-	    }
-	}
-
-
+    WhatsAppService(AccountRepository accountRepository) {
+        this.accountRepository = accountRepository;
+    }
 
 //	public void handleIncoming(Map<String, Object> payload) {
 //
-//	    log.info("Handling incoming WhatsApp message...");
+//		// 0️⃣ Ignore non-user events
+//		if (!extractor.isUserMessageEvent(payload)) {
+//			return;
+//		}
+//		
+//		Optional<String> phoneOpt = extractor.extractPhone(payload);
+//		Optional<String> messageIdOpt = extractor.extractMessageId(payload);
 //
-//	    Optional<String> phoneOpt = extractor.extractPhone(payload);
-//	    Optional<String> textOpt  = extractor.extractText(payload);
+//		if (phoneOpt.isEmpty() || messageIdOpt.isEmpty()) {
+//			return;
+//		}
 //
-//	    
-//	    if (phoneOpt.isEmpty() || textOpt.isEmpty()) {
-//	        log.warn("Required fields missing from webhook payload");
-//	        return;
-//	    }
+//		String from = phoneOpt.get();
+//		String messageId = messageIdOpt.get();
 //
-//	    String from = phoneOpt.get();
-//	    String text = textOpt.get().trim().toLowerCase();
+//		String message = extractor.extractText(payload).map(String::trim).orElse("");
 //
-//	    Broker broker = BrokerContext.get();
-//	    if (broker == null) {
-//	        log.warn("No broker in context");
-//	        return;
-//	    }
-//	    
-//	    
+//		Optional<MediaInput> mediaOpt = extractor.extractImageMedia(payload);
 //
-//	    if (broker.getStatus() == BrokerStatus.ONBOARDING) {
-//	    	brokerOnboardingService.handle(broker, text);
-//	        return;
-//	    }
-//	  
-//	    if (broker.getStatus() != BrokerStatus.ACTIVE) {
-//	        return; // suspended or invalid
-//	    }
+//		// 1️⃣ HARD idempotency (keep old guarantee)
+//		if (processedMessageRepository.existsByMessageId(messageId)) {
+//			log.info("Duplicate WhatsApp message ignored: {}", messageId);
+//			return;
+//		}
+//		processedMessageRepository.save(new ProcessedMessage(messageId));
 //
-//	    // ✅ YES FLOW (NO parsing, NO lead creation)
-//	    if (text.equals("yes")) {
-//	        handleYesConfirmation(payload);
-//	        return;
-//	    }
+//		
+//		// 2️⃣ Resolve Actor (observe-only)
+//		Optional<Actor> actorOpt = actorResolver.resolve(payload);
 //
-//	    // 🔍 SEARCH FLOW
-//	    ParsedRequest parsed = SimpleParser.parse(text);
-//	    
-//	    
-//	    boolean hasSearchIntent =
-//	            parsed.bhk() != null &&
-//	            (parsed.minBudget() != null || parsed.maxBudget() != null) &&
-//	            (parsed.city() != null || parsed.location() != null);
+//		if (actorOpt.isEmpty()) {
+//		    log.warn("Could not resolve actor from payload, skipping message");
+//		    return;
+//		}
 //
-//	    if (!hasSearchIntent) {
-//	        log.info("No search intent detected. Skipping lead creation.");
-//	        return;
-//	    }
-//	    
-////	    if (!parsed.hasSearchIntent()) {
-////	        log.info("No search intent detected. Skipping lead creation.");
-////	        whatsAppSender.sendTextMessage(
-////	            from,
-////	            "Please share your requirement, e.g. 2 BHK rent in Gurgaon 30k"
-////	        );
-////	        return;
-////	    }
-//	    
+//		Actor actor = actorOpt.get();
+//		ActorContext.set(actor);
 //
-//	    if (!parsed.valid()) {
-//	        handleInvalidRequest(parsed, from);
-//	        return;
-//	    }
-//	    
-//	    
-//	    Long brokerId = broker.getId();
+//		log.info("Incoming WhatsApp message from Actor → {}", actor);
+//		
+//		
+//		
+//		// 2️⃣ YES short-circuit (unchanged)
+//		if (message.equalsIgnoreCase("yes")) {
+//			yesHandler.handle(from, messageId);
+//			return;
+//		}
 //
-//	    log.info("Context brokerId = {}", brokerId);
-//	    log.info("DB existsById = {}", brokerRepository.existsById(brokerId));
 //
-//	    // ✅ create lead only for real searches
-//	    leadService.createFromParsed(
-//	            from,
-//	            text,
-//	            parsed.bhk(),
-//	            parsed.minBudget(),
-//	            parsed.maxBudget(),
-//	            parsed.location(),
-//	            parsed.city()
-//	    );
+//		Broker broker = null;
 //
-//	    List<Property> matches = propertyService.findMatches(
-//	    	    parsed.bhk(),
-//	    	    parsed.location(),   // ✅ NOT city
-//	    	    parsed.minBudget(),
-//	    	    parsed.maxBudget(),
-//	    	    broker.getId()
-//	    	);
-//	    
-//	    
-//	    log.warn(
-//	    	    "INTENT CHECK  → title={} bhk={}, min={}, max={}, city={}, location={}",
-//	    	    
-//	    	    parsed.title(),    
-//	    	    parsed.bhk(),
-//	    	    parsed.minBudget(),
-//	    	    parsed.maxBudget(),
-//	    	    parsed.city(),
-//	    	    parsed.location()
-//	    	);
+//		if (actor != null && actor.type() == ActorType.BROKER) {
+//		    broker = brokerRepository.findById(actor.internalId())
+//		            .orElse(null);
 //
-//	    if (matches.isEmpty()) {
-//	        whatsAppSender.sendTextMessage(from,
-//	                "I couldn't find matching properties. Try changing budget or location.");
-//	        return;
-//	    }
+//		    if (broker == null) {
+//		        log.warn(
+//		            "ActorContext says BROKER {} but broker not found in DB",
+//		            actor
+//		        );
+//		    }
+//		}
 //
-//	    
-//	    sendPropertyList(from, matches);
+//		// 🔁 Fallback to old behavior (unchanged semantics)
+//		if (broker == null) {
+//		    broker = brokerRepository.findByPhone(from)
+//		            .orElseGet(() -> brokerService.createForOnboarding(from));
+//		}
+//		
+//		log.debug(
+//			    "Resolved broker {} for actor {} via {}",
+//			    broker.getId(),
+//			    actor,
+//			    (actor != null && actor.type() == ActorType.BROKER) ? "ActorContext" : "legacy lookup"
+//			);
+//
+//		
+//		
+////		// 3️⃣ Resolve or create Broker ONLY as identity
+////		Broker broker = brokerRepository.findByPhone(from).orElseGet(() -> brokerService.createForOnboarding(from));
+//
+//		// 4️⃣ Conversation = SINGLE source of truth for flow
+//		BrokerConversation conversation = conversationService.getOrCreate(broker.getId());
+//
+//		// 5️⃣ Conversation-level idempotency (extra safety)
+//		if (!conversation.markMessageProcessed(messageId)) {
+//			return;
+//		}
+//
+//		// 1️⃣ Flow selection phase
+//		if (conversation.getPhase() == ConversationPhase.CHOOSING_FLOW) {
+//
+//			Optional<ConversationFlow> flow = flowResolver.resolveExplicitChoice(message);
+//
+//			if (flow.isEmpty()) {
+//				sendFlowChooser(from);
+//				return;
+//			}
+//
+//			conversation.setFlow(flow.get());
+//			conversation.setPhase(ConversationPhase.IN_FLOW);
+//			conversationService.save(conversation);
+//		}
+//		
+//		
+//		log.info(
+//			    "Actor {} entering conversation flow={}, phase={}",
+//			    actor,
+//			    conversation.getFlow(),
+//			    conversation.getPhase()
+//			);
+//
+//		switch (conversation.getFlow()) {
+//
+//			case BROKER_ONBOARDING -> {
+//				// 🔑 Resolve Broker (domain object)
+//				broker = brokerRepository.findById(conversation.getBrokerId())
+//						.orElseThrow(() -> new IllegalStateException("Broker not found"));
+//	
+//				BrokerContext.set(broker);
+//				try {
+//					brokerOnboardingService.handle(broker, message);
+//				} finally {
+//					
+//				    ActorContext.clear();
+//					BrokerContext.clear();
+//				}
+//			}
+//	
+//			case SEARCH -> {
+//				// 🔑 Parse intent (search handler contract)
+//				ParsedRequest parsed = SimpleParser.parse(message);
+//	
+//				searchHandler.handle(from, // or `from`
+//						parsed);
+//			}
+//	
+//			case ADD_PROPERTY -> {
+//				addPropertyHandler.handle(broker.getPhone(), message, mediaOpt, messageIdOpt);
+//			}
+//		}
+//
 //	}
+//	
 
-	
-	
-	/* ---------------- Defensive JSON extractors ---------------- */
+	public void handleIncoming(Map<String, Object> payload) {
 
-	private void handleYesConfirmation(Map<String, Object> payload) {	
-		
+		// 0️⃣ Ignore non-user events
+		if (!extractor.isUserMessageEvent(payload)) {
+			return;
+		}
+
+		Optional<Actor> actorOpt = actorResolver.resolve(payload);
+		if (actorOpt.isEmpty()) {
+			log.warn("Could not resolve actor from payload");
+			return;
+		}
+
+		Actor actor = actorOpt.get();
+
+		withActorContext(actor, () -> {
+			handleIncomingWithActor(payload, actor);
+		});
+	}
+
+	private void handleIncomingWithActor(Map<String, Object> payload, Actor actor) {
 
 		Optional<String> phoneOpt = extractor.extractPhone(payload);
-		if (phoneOpt.isEmpty()) {
+		Optional<String> messageIdOpt = extractor.extractMessageId(payload);
+
+		if (phoneOpt.isEmpty() || messageIdOpt.isEmpty()) {
 			return;
 		}
 
-		String phone = phoneOpt.get();
+		String from = phoneOpt.get();
+		String messageId = messageIdOpt.get();
+		String message = extractor.extractText(payload).map(String::trim).orElse("");
+		Optional<MediaInput> mediaOpt = extractor.extractImageMedia(payload);
 
-		
+		// 1️⃣ HARD idempotency
+		if (processedMessageRepository.existsByMessageId(messageId)) {
+			log.info("Duplicate WhatsApp message ignored: {}", messageId);
+			return;
+		}
+		processedMessageRepository.save(new ProcessedMessage(messageId));
 
-	    Long brokerId = BrokerContext.id();
+		log.info("Incoming WhatsApp message from Actor → {}", actor);
 
-	    Instant startOfMonth = LocalDate.now()
-	            .withDayOfMonth(1)
-	            .atStartOfDay(ZoneId.systemDefault())
-	            .toInstant();
-
-	    long usedLeads = LeadRepository.countMonthlyLeads(
-	            brokerId,
-	            startOfMonth
-	    );
-
-	    if (usedLeads >= FREE_LEAD_LIMIT) {
-	        whatsAppSender.sendTextMessage(
-	                phone,
-	                """
-	                🚫 Free lead limit reached.
-
-	                Please contact the broker directly
-	                or upgrade your plan to receive more enquiries.
-	                """
-	        );
-	        return;
-	    }
-		
-		
-		
-		// 1. Find latest lead for this phone
-		Optional<Lead> latestLeadOpt = leadService.findLatestByPhone(phone);
-
-		if (latestLeadOpt.isEmpty()) {
-			whatsAppSender.sendTextMessage(phone, "I couldn’t find a recent enquiry. Please search again.");
+		// 2️⃣ YES short-circuit
+		if (message.equalsIgnoreCase("yes")) {
+			yesHandler.handle(from, messageId);
 			return;
 		}
 
-		Lead lead = latestLeadOpt.get();
-		Broker broker = BrokerContext.get();
+		// Stateless handling for actors without internal identity
+		if (actor.internalId() == null) {
 
-		// 2. Notify broker
-		String brokerMessage = """
-				📢 New Interested Lead
+		    Optional<ConversationFlow> flowOpt =
+		        flowResolver.resolveExplicitChoice(message);
 
-				📞 Phone: %s
-				🏠 Requirement: %s
-				📍 Location: %s
-				💰 Budget: %s
-				""".formatted(phone, lead.getBhk(), lead.getLocation(), formatBudget(lead));
+		    // SEARCH stays stateless
+		    if (flowOpt.isEmpty() || flowOpt.get() == ConversationFlow.SEARCH) {
+		        ParsedRequest parsed = SimpleParser.parse(message);
+		        searchHandler.handle(actor, parsed);
+		        return;
+		    }
 
-		whatsAppSender.sendTextMessage(broker.getPhone(), brokerMessage);
+		    // 🔑 NATURAL LANGUAGE ONBOARDING TRIGGER
+		    if (flowOpt.get() == ConversationFlow.BROKER_ONBOARDING) {
 
-		// 3. Confirm to user
-		whatsAppSender.sendTextMessage(phone, "✅ Thanks! The broker has been notified and will contact you shortly.");
-		
-	}
+		        // ✅ CREATE ACCOUNT IMMEDIATELY
+		        Account account =
+		            accountService.createFromActor(actor);
 
-	private String formatAmount(Integer amount) {
-		return String.format("%,d", amount);
-	}
+		        // ✅ Upgrade actor
+		        Actor onboardedActor =
+		            actor.withInternalId(account.getId())
+		                 .withType(account.getType());
 
-	private String formatBudget(Lead lead) {
+		        ActorContext.set(onboardedActor);
 
-		Integer min = lead.getMinBudget();
-		Integer max = lead.getMaxBudget();
+		        // ✅ Create conversation NOW (owner_account_id will NOT be null)
+		        BrokerConversation conversation =
+		            conversationService.getOrCreate(account.getId());
 
-		if (min == null && max == null) {
-			return "Not specified";
+		        conversation.setFlow(ConversationFlow.BROKER_ONBOARDING);
+		        conversation.setPhase(ConversationPhase.IN_FLOW);
+		        conversationService.save(conversation);
+
+		        // ✅ Hand off to onboarding
+		        brokerOnboardingService.handle(onboardedActor, message);
+
+		        return;
+		    }
+
+		    // Fallback (should rarely happen)
+		    whatsAppSender.sendTextMessage(
+		        actor.externalId(),
+		        """
+		        👋 You can search for properties freely.
+		        To list properties, just say:
+		        *I want to list my property*
+		        """
+		    );
+		    return;
 		}
 
-		if (min != null && max != null && min.equals(max)) {
-			return "₹" + formatAmount(min);
+
+		// 4️⃣ Conversation
+		BrokerConversation conversation = conversationService.getOrCreate(actor.internalId());
+
+		if (!conversation.markMessageProcessed(messageId)) {
+			return;
 		}
 
-		if (min != null && max != null) {
-			return "₹" + formatAmount(min) + " – ₹" + formatAmount(max);
+		if (conversation.getPhase() == ConversationPhase.CHOOSING_FLOW) {
+			Optional<ConversationFlow> flow = flowResolver.resolveExplicitChoice(message);
+
+			if (flow.isEmpty()) {
+				sendFlowChooser(from);
+				return;
+			}
+
+			conversation.setFlow(flow.get());
+			conversation.setPhase(ConversationPhase.IN_FLOW);
+			conversationService.save(conversation);
 		}
 
-		if (min != null) {
-			return "From ₹" + formatAmount(min);
+		log.info("Actor {} entering conversation flow={}, phase={}", actor, conversation.getFlow(),
+				conversation.getPhase());
+
+		if (conversation.getFlow() == ConversationFlow.ADD_PROPERTY
+				&& !ActorContext.hasCapability(Capability.ADD_PROPERTY)) {
+
+			log.warn("Actor {} blocked from ADD_PROPERTY flow", actor);
+
+			whatsAppSender.sendTextMessage(actor.externalId(), """
+					🚫 *You can’t add properties yet*
+
+					This action requires property-listing access.
+
+					👉 If you are a broker or owner, reply:
+					*I want to list my property*
+					""");
+			return;
 		}
 
-		return "Up to ₹" + formatAmount(max);
+		switch (conversation.getFlow()) {
+
+		case BROKER_ONBOARDING -> {
+			brokerOnboardingService.handle(ActorContext.get(), message);
+		}
+
+		case SEARCH -> {
+			ParsedRequest parsed = SimpleParser.parse(message);
+			searchHandler.handle(ActorContext.get(), parsed);
+		}
+
+		case ADD_PROPERTY -> {
+			addPropertyHandler.handle(ActorContext.get(), message, mediaOpt, messageIdOpt);
+		}
+		}
 	}
-	
-	private void sendPropertyList(String phone, List<Property> matches) {
 
-	    StringBuilder reply = new StringBuilder("Here are some matching properties:\n\n");
+	private void sendFlowChooser(String from) {
+		whatsAppSender.sendTextMessage(from, """
+				👋 Hi!
 
-	    matches.stream()
-	            .limit(5)
-	            .forEach(p -> reply.append("🏠 ").append(p.getBhk()).append("\n")
-	            	    .append((p.getTitle() == null || p.getTitle().isBlank()) ? p.getBhk() : p.getTitle())
-	            	    .append('\n')
-	                    .append("📍 ").append(p.getArea()).append('\n')
-	                    .append("💰 ₹").append(p.getPrice()).append(" / month\n")
-	                    .append("---------------------\n"));
+				What would you like to do?
 
-	    reply.append("\nReply YES to connect with the broker.");
-
-	    whatsAppSender.sendTextMessage(phone, reply.toString());
+				1️⃣ Find a property
+				2️⃣ I am a broker / agent
+				""");
 	}
 
-	
-	private void handleInvalidRequest(ParsedRequest parsed, String phone) {
-
-	    if ("PURCHASE_BUDGET_NOT_SUPPORTED".equals(parsed.invalidReason())) {
-	        whatsAppSender.sendTextMessage(phone,
-	                """
-	                I currently help with rental properties only.
-	                Please share your monthly rent budget (e.g. 25k, 30k).
-	                """
-	        );
-	    } else {
-	        whatsAppSender.sendTextMessage(phone,
-	                "Sorry, I couldn't understand your request. Please try again.");
-	    }
+	private void withActorContext(Actor actor, Runnable action) {
+		ActorContext.set(actor);
+		try {
+			action.run();
+		} finally {
+			ActorContext.clear();
+		}
 	}
 
 }

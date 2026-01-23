@@ -1,30 +1,40 @@
 package com.risingbee.realestate.automation.parser;
 
-
+import java.util.List;
 public record ParsedRequest(
-		String title,
-        String bhk,
-        Integer minBudget,
-        Integer maxBudget,
-        String location,
-        String city,
-        boolean valid,
-        String invalidReason
-) {
-    public static ParsedRequest invalid(String reason) {
-        return new ParsedRequest(null,null, null, null, null,null, false, reason);
-    }
-    
+	    String bhk,
+	    Integer minBudget,
+	    Integer maxBudget,
 
-    public static ParsedRequest empty() {
-        return new ParsedRequest(null,null, null, null, null,null, true, null);
-    }
-    
-    public boolean hasSearchIntent() {
-        return bhk != null
-            && (city != null || location != null)
-            && (minBudget != null || maxBudget != null);
-    }
-}
+	    /** Raw, fuzzy location-like text (e.g. "sector 56", "golf") */
+	    List<String> location,
 
+	    String normalizedText,
+	    List<String> tokens,
+
+	    boolean hasSearchIntent
+	) {
+
+	    public boolean hasBudget() {
+	        return minBudget != null || maxBudget != null;
+	    }
+
+	    public boolean hasBhk() {
+	        return bhk != null;
+	    }
+
+	    public boolean hasLocation() {
+	        return !location.isEmpty();
+	    }
+
+	    public boolean hasListingSignals() {
+	        return hasBhk() || hasBudget() || hasLocation();
+	    }
+	    
+	    public  boolean hasSearchIntent() {
+	        return  bhk != null &&
+	                (minBudget != null || maxBudget != null) &&
+	                !location.isEmpty() ;
+	    }
+	}
 

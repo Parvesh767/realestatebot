@@ -1,11 +1,15 @@
 package com.risingbee.realestate.automation.service;
 
+import java.util.List;
+
 import org.springframework.stereotype.Service;
 
+import com.risingbee.realestate.automation.actor.Actor;
+import com.risingbee.realestate.automation.actor.enums.ActorType;
 import com.risingbee.realestate.automation.domain.Broker;
+import com.risingbee.realestate.automation.interfaces.BrokerOnboardingService;
 import com.risingbee.realestate.automation.repo.BrokerRepository;
 import com.risingbee.realestate.enums.BrokerOnboardingStep;
-import com.risingbee.realestate.enums.BrokerStatus;
 
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -14,183 +18,168 @@ import lombok.extern.slf4j.Slf4j;
 @Service
 @RequiredArgsConstructor
 @Slf4j
-public class BrokerOnboardingServiceImpl implements com.risingbee.realestate.automation.interfaces.BrokerOnboardingService {
+public class BrokerOnboardingServiceImpl implements BrokerOnboardingService {
 
-    private final BrokerRepository brokerRepository;
-    private final WhatsAppSender whatsAppSender;
+	private final BrokerRepository brokerRepository;
+	private final BrokerAreaService brokerAreaService;
+	private final BrokerPreferenceService brokerPreferenceService;
+	private final WhatsAppSender whatsAppSender;
 
-    @Override
-    @Transactional
-    public void handle(Broker broker, String message) {
+	@Override
+	@Transactional
+	public void handle(Actor actor, String message)
+{
+		if (actor == null || message == null) return;
 
-        if (message == null) return;
+		if (actor.type() != ActorType.BROKER) {
+		    log.warn("Actor {} attempted broker onboarding", actor);
+		    return;
+		}
 
-        String text = message.trim().toLowerCase();
+		Broker broker = brokerRepository
+		        .findById(actor.internalId())
+		        .orElseThrow(() ->
+		            new IllegalStateException("Broker not found for actor " + actor)
+		        );
+		
+		if (broker.getOnboardingStep() == BrokerOnboardingStep.DONE) {
+		    log.info("Broker {} already onboarded, ignoring onboarding input", broker.getId());
+		    return;
+		}
 
-        switch (broker.getOnboardingStep()) {
+		
+		// 🛡️ HARD GUARD: heal invalid brokers
+		if (broker.getOnboardingStep() == null) {
+			log.warn("Broker {} has NULL onboardingStep. Auto-healing to START.", broker.getId());
 
-            case START -> askLocation(broker);
+			broker.resetOnboarding();
+			brokerRepository.save(broker);
+		}
 
-            case AREAS -> handleLocation(broker, text);
+		String text = message.trim().toLowerCase();
 
-            case BUDGET -> handleBudget(broker, text);
+		switch (broker.getOnboardingStep()) {
 
-            case BHK -> handleBhk(broker, text);
+		case START -> askLocation(broker);
 
-            case DONE -> {
-                // safety net
-                broker.setStatus(BrokerStatus.ACTIVE);
-                brokerRepository.save(broker);
-            }
-        }
-    }
-    
-    
-    private void saveAndAsk(Broker broker, String message) {
-        save(broker);
-        send(broker, message);
-    }
-    
- 
-    
-    private void save(Broker broker) {
-        brokerRepository.save(broker);
-        log.debug(
-            "Broker {} saved | status={} | step={}",
-            broker.getId(),
-            broker.getStatus(),
-            broker.getOnboardingStep()
-        );
-    }
-    
-    private void send(Broker broker, String message) {
-        log.info("Sending onboarding message to {} → {}", broker.getPhone(), message);
-        whatsAppSender.sendTextMessage(broker.getPhone(), message);
-    }
-    
-    
-    
-    
-  
+		case AREAS -> handleAreas(broker, text);
 
-    /* ---------------- STEP HANDLERS ---------------- */
+		case BUDGET -> handleBudget(broker, text);
 
-    private void askLocation(Broker broker) {
+		case BHK -> handleBhk(broker, text);
 
-        broker.setOnboardingStep(BrokerOnboardingStep.AREAS);
-        saveAndAsk(
-            broker,
-            """
-            👋 Welcome!
+		case DONE -> {
+			broker.activate();
+			brokerRepository.save(broker);
+		}
+		}
+	}
 
-            Which areas do you deal in?
-            (Example: Gurgaon, Sector 56, Golf Course Road)
-            """
-        );
-    }
+	/* ---------------- STEP HANDLERS ---------------- */
 
-    private void handleLocation(Broker broker, String text) {
+	private void askLocation(Broker broker) {
 
-        if (text.length() < 3) {
-            whatsAppSender.sendTextMessage(
-                    broker.getPhone(),
-                    "Please enter at least one valid location."
-            );
-            return;
-        }
+		broker.advanceOnboarding(BrokerOnboardingStep.AREAS);
+		send(broker, "Got it — Gurugram 👍\n\nYou can also specify localities like DLF Phase 3 or Sector 22.");
 
-        broker.setLocations(text);
-        broker.setOnboardingStep(BrokerOnboardingStep.BUDGET);
-        brokerRepository.save(broker);
+	}
 
-        whatsAppSender.sendTextMessage(
-                broker.getPhone(),
-                """
-                💰 What rental budget do you handle?
+	private void handleAreas(Broker broker, String text) {
 
-                Example:
-                20k-30k
-                25k
-                """
-        );
-    }
+		boolean saved = brokerAreaService.save(broker.getId(), List.of(text.split(",")));
 
-    private void handleBudget(Broker broker, String text) {
+		if (!saved) {
+			send(broker, """
+					❌ I couldn't recognize that area.
 
-        Integer min = null;
-        Integer max = null;
+					Please reply with a valid location.
+					Example:
+					Gurgaon, DLF Phase 3, Sector 22
+					""");
+			return;
+		}
 
-        try {
-            String cleaned = text.replaceAll("\\s+", "");
+		broker.advanceOnboarding(BrokerOnboardingStep.BUDGET);
+		saveAndSend(broker, """
+				💰 What rental budget do you handle?
 
-            if (cleaned.contains("-")) {
-                String[] parts = cleaned.split("-");
-                min = parseAmount(parts[0]);
-                max = parseAmount(parts[1]);
-            } else {
-                min = parseAmount(cleaned);
-                max = min;
-            }
+				Example:
+				20k-30k
+				25k
+				""");
+	}
 
-        } catch (Exception e) {
-            whatsAppSender.sendTextMessage(
-                    broker.getPhone(),
-                    "Invalid budget format. Example: 20k-30k"
-            );
-            return;
-        }
+	private void handleBudget(Broker broker, String text) {
 
-        broker.setMinBudget(min);
-        broker.setMaxBudget(max);
-        broker.setOnboardingStep(BrokerOnboardingStep.BHK);
-        brokerRepository.save(broker);
+		Integer min;
+		Integer max;
 
-        whatsAppSender.sendTextMessage(
-                broker.getPhone(),
-                """
-                🏠 Which property types do you deal in?
+		try {
+			String cleaned = text.replaceAll("\\s+", "");
 
-                Reply with:
-                1BHK, 2BHK, 3BHK (comma separated)
-                """
-        );
-    }
+			if (cleaned.contains("-")) {
+				String[] parts = cleaned.split("-");
+				min = parseAmount(parts[0]);
+				max = parseAmount(parts[1]);
+			} else {
+				min = parseAmount(cleaned);
+				max = min;
+			}
 
-    private void handleBhk(Broker broker, String text) {
+		} catch (Exception e) {
+			send(broker, "Invalid budget format. Example: 20k-30k");
+			return;
+		}
 
-        if (!text.matches(".*\\d+bhk.*")) {
-            whatsAppSender.sendTextMessage(
-                    broker.getPhone(),
-                    "Please reply like: 1BHK, 2BHK"
-            );
-            return;
-        }
+		brokerPreferenceService.updateBudget(broker.getId(), min, max);
 
-        broker.setBhkPreference(text.toUpperCase());
-        broker.setOnboardingStep(BrokerOnboardingStep.DONE);
-        broker.setStatus(BrokerStatus.ACTIVE);
+		broker.advanceOnboarding(BrokerOnboardingStep.BHK);
+		saveAndSend(broker, """
+				🏠 Which property types do you deal in?
 
-        brokerRepository.save(broker);
+				Reply with:
+				1BHK, 2BHK, 3BHK (comma separated)
+				""");
+	}
 
-        whatsAppSender.sendTextMessage(
-                broker.getPhone(),
-                """
-                ✅ You're all set!
+	private void handleBhk(Broker broker, String text) {
 
-                You will now start receiving tenant enquiries.
-                """
-        );
-    }
+		if (!text.matches(".*\\d+bhk.*")) {
+			send(broker, "Please reply like: 1BHK, 2BHK");
+			return;
+		}
 
-    /* ---------------- UTIL ---------------- */
+		List<String> bhks = List.of(text.toUpperCase().split(","));
 
-    private Integer parseAmount(String value) {
-        value = value.toLowerCase();
+		brokerPreferenceService.updateBhks(broker.getId(), bhks);
 
-        if (value.endsWith("k")) {
-            return Integer.parseInt(value.replace("k", "")) * 1000;
-        }
-        return Integer.parseInt(value);
-    }
+		broker.advanceOnboarding(BrokerOnboardingStep.DONE);
+		broker.activate();
+		brokerRepository.save(broker);
+
+		send(broker, """
+				✅ You're all set!
+
+				You will now start receiving tenant enquiries.
+				""");
+	}
+
+	/* ---------------- HELPERS ---------------- */
+
+	private void saveAndSend(Broker broker, String message) {
+		brokerRepository.save(broker);
+		send(broker, message);
+	}
+
+	private void send(Broker broker, String message) {
+		whatsAppSender.sendTextMessage(broker.getPhone(), message);
+	}
+
+	private Integer parseAmount(String value) {
+		value = value.toLowerCase();
+		if (value.endsWith("k")) {
+			return Integer.parseInt(value.replace("k", "")) * 1000;
+		}
+		return Integer.parseInt(value);
+	}
 }
-

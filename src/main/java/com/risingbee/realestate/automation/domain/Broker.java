@@ -13,13 +13,12 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import lombok.Getter;
-import lombok.Setter;
 
 
 
 @Entity
 @Table(name = "broker")
-@Getter @Setter
+@Getter 
 public class Broker {
 
     @Id
@@ -34,16 +33,41 @@ public class Broker {
     @Enumerated(EnumType.STRING)
     private BrokerOnboardingStep onboardingStep;
 
-    // onboarding data
-    private String locations;        // comma separated
+    // --------------------
+    // Preferences (TEMP)
+    // --------------------
+    // These can later move fully into BrokerPreference
     private Integer minBudget;
     private Integer maxBudget;
-    private String bhkPreference;    // comma separated
+
+//    @Enumerated(EnumType.STRING)
+//    private ConversationState conversationState = ConversationState.NEW;
+
+    // JPA requirement
+    protected Broker() {}
+    public Broker(String phone) {
+    	this.phone = phone ;
+    }
+
+    // Controlled mutations (optional but recommended)
+    public void advanceOnboarding(BrokerOnboardingStep step) {
+        this.onboardingStep = step;
+    }
+
+    public void activate() {
+        this.status = BrokerStatus.ACTIVE;
+    }
     
-    @Enumerated(EnumType.STRING)
-    private ConversationState conversationState = ConversationState.NEW;
+    public void resetOnboarding() {
+        this.onboardingStep = BrokerOnboardingStep.START;
+        this.status = BrokerStatus.ONBOARDING;
+    }
 
+    public void startOnboarding() {
+        this.status = BrokerStatus.ONBOARDING;
+        this.onboardingStep = BrokerOnboardingStep.START;
+    }
 
-    // getters/setters
+    
 }
 

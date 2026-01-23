@@ -8,18 +8,19 @@ import com.risingbee.realestate.automation.domain.BrokerConversation;
 import com.risingbee.realestate.flow.ConversationFlow;
 
 public interface BrokerConversationRepository
-extends JpaRepository<BrokerConversation, Long> {
+        extends JpaRepository<BrokerConversation, Long> {
 
-Optional<BrokerConversation> findByBrokerIdAndFlow(
-    Long brokerId,
-    ConversationFlow flow
-);
+    Optional<BrokerConversation> findByOwnerAccountIdAndFlow(
+        Long ownerAccountId,
+        ConversationFlow flow
+    );
 
-void deleteByBrokerIdAndFlow(
-    Long brokerId,
-    ConversationFlow flow
-);
 
-Optional<BrokerConversation> findActiveByBrokerId(Long id);
+    Optional<BrokerConversation> findByOwnerAccountId(Long ownerAccountId);
+
+//    Optional<BrokerConversation> findByOwnerAccountIdAndFlow(
+//        Long ownerAccountId,
+//        ConversationFlow flow
+//    );
+//}
 }
-

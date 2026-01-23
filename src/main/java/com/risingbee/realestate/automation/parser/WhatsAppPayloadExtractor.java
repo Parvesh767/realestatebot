@@ -157,6 +157,57 @@ public class WhatsAppPayloadExtractor {
             return false;
         }
     }
+    
+    
+    public Optional<String> extractMessageId(Map<String, Object> payload) {
+
+        try {
+            Object entryObj = payload.get("entry");
+            if (!(entryObj instanceof List<?> entryList) || entryList.isEmpty()) {
+                return Optional.empty();
+            }
+
+            Object entry0 = entryList.get(0);
+            if (!(entry0 instanceof Map<?, ?> entry)) {
+                return Optional.empty();
+            }
+
+            Object changesObj = entry.get("changes");
+            if (!(changesObj instanceof List<?> changes) || changes.isEmpty()) {
+                return Optional.empty();
+            }
+
+            Object change0 = changes.get(0);
+            if (!(change0 instanceof Map<?, ?> change)) {
+                return Optional.empty();
+            }
+
+            Object valueObj = change.get("value");
+            if (!(valueObj instanceof Map<?, ?> value)) {
+                return Optional.empty();
+            }
+
+            Object messagesObj = value.get("messages");
+            if (!(messagesObj instanceof List<?> messages) || messages.isEmpty()) {
+                return Optional.empty();
+            }
+
+            Object msg0 = messages.get(0);
+            if (!(msg0 instanceof Map<?, ?> message)) {
+                return Optional.empty();
+            }
+
+            Object id = message.get("id");
+            return (id instanceof String)
+                    ? Optional.of((String) id)
+                    : Optional.empty();
+
+        } catch (Exception e) {
+            return Optional.empty();
+        }
+    }
+
+
 
 
 

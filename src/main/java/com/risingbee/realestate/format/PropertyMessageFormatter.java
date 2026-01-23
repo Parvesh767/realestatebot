@@ -17,7 +17,7 @@ public class PropertyMessageFormatter {
             .limit(3)
             .forEach(p -> sb.append(
                 "🏠 ").append(p.getTitle()).append("\n")
-                .append("📍 ").append(p.getArea()).append("\n")
+//                .append("📍 ").append(p.getArea()).append("\n")
                 .append("💰 ₹").append(p.getPrice()).append("/month\n\n")
             );
 

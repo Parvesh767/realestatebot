@@ -1,11 +1,19 @@
 package com.risingbee.realestate.automation.service;
 
+import java.io.IOException;
+import java.net.URI;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.Arrays;
 import java.util.List;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
-import com.risingbee.realestate.automation.domain.Broker;
+import com.risingbee.realestate.automation.actor.ActorContext;
+import com.risingbee.realestate.automation.actor.enums.Capability;
 import com.risingbee.realestate.automation.domain.BrokerConversation;
 import com.risingbee.realestate.automation.domain.Property;
 import com.risingbee.realestate.automation.dto.PropertyRequestDTO;
@@ -13,8 +21,10 @@ import com.risingbee.realestate.automation.dto.PropertyResponseDTO;
 import com.risingbee.realestate.automation.exception.AccessDeniedException;
 import com.risingbee.realestate.automation.exception.ResourceNotFoundException;
 import com.risingbee.realestate.automation.mapper.PropertyMapper;
+import com.risingbee.realestate.automation.parser.LocationResolver;
+import com.risingbee.realestate.automation.parser.ResolvedLocation;
 import com.risingbee.realestate.automation.repo.PropertyRepository;
-import com.risingbee.realestate.automation.tenant.BrokerContext;
+import com.risingbee.realestate.automation.service.storage_service.PhotoStorageService;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -26,15 +36,81 @@ import lombok.extern.slf4j.Slf4j;
 public class PropertyService {
 
     private final PropertyRepository repository;
+    private final PhotoStorageService photoStorageService;
+    private final LocationResolver locationResolver;
 
     /* =========================
        CREATE (REST / API)
        ========================= */
-    public PropertyResponseDTO create(PropertyRequestDTO dto) {
 
-        Broker broker = requireBroker();
+    public PropertyResponseDTO create(
+            PropertyRequestDTO dto,
+            List<MultipartFile> photos
+    ) {
+        ActorContext.requireCapability(Capability.ADD_PROPERTY);
 
-        Property property = PropertyMapper.toEntity(dto, broker);
+        Long ownerAccountId = ActorContext.get().internalId();
+
+        ResolvedLocation rl =
+                locationResolver
+                        .resolveText(tokenizeArea(dto.getArea()))
+                        .orElse(null);
+
+        Property property = PropertyMapper.toEntity(dto, ownerAccountId);
+
+        if (rl != null) {
+            property.updateLocation(rl.city(), rl.locality());
+        }
+
+        if (photos != null && !photos.isEmpty()) {
+            property.addPhotos(photoStorageService.saveAll(photos));
+        }
+
+        repository.save(property);
+        return PropertyMapper.toDTO(property);
+    }
+
+    /* =========================
+       UPDATE
+       ========================= */
+
+    public PropertyResponseDTO update(
+            Long id,
+            PropertyRequestDTO dto,
+            List<MultipartFile> newPhotos,
+            List<String> removePhotos
+    ) {
+        Property property = loadOwnedProperty(id);
+
+        property.updateDetails(
+                dto.getTitle(),
+                dto.getPrice(),
+                dto.getDescription(),
+                dto.getMapLink()
+        );
+
+        if (dto.getArea() != null) {
+            ResolvedLocation rl =
+                    locationResolver
+                            .resolveText(tokenizeArea(dto.getArea()))
+                            .orElse(null);
+
+            if (rl != null) {
+                property.updateLocation(rl.city(), rl.locality());
+            }
+        }
+
+        if (removePhotos != null && !removePhotos.isEmpty()) {
+            List<String> normalizedPaths =
+                    removePhotos.stream().map(this::normalizePath).toList();
+
+            normalizedPaths.forEach(photoStorageService::delete);
+            property.removePhotos(normalizedPaths);
+        }
+
+        if (newPhotos != null && !newPhotos.isEmpty()) {
+            property.addPhotos(photoStorageService.saveAll(newPhotos));
+        }
 
         repository.save(property);
         return PropertyMapper.toDTO(property);
@@ -43,132 +119,111 @@ public class PropertyService {
     /* =========================
        CREATE (WhatsApp flow)
        ========================= */
+
     public Property createFromConversation(BrokerConversation conv) {
+        ActorContext.requireCapability(Capability.ADD_PROPERTY);
 
-        Broker broker = requireBroker();
+        Long ownerAccountId = ActorContext.get().internalId();
 
-        Property p = Property.builder()
-                .broker(broker)
-                .bhk(conv.getBhk())
-                .area(conv.getArea())
-                .price(conv.getPrice())
-                .title(conv.getBhk() + " in " + conv.getArea())
-                .active(true)
-                .build();
+        ResolvedLocation rl =
+                locationResolver
+                        .resolveText(tokenizeArea(conv.getArea()))
+                        .orElse(null);
 
-        p.setPhotos(conv.getPhotos());
+        Property property = new Property(
+                ownerAccountId,
+                buildTitle(conv, rl),
+                conv.getBhk(),
+                conv.getPrice(),
+                rl != null ? rl.city() : null,
+                rl != null ? rl.locality() : null
+        );
 
-        repository.save(p);
-        return p;
-    }
-
-
-    /* =========================
-       UPDATE
-       ========================= */
-    public PropertyResponseDTO update(Long id, PropertyRequestDTO dto) {
-
-        Property p = loadOwnedProperty(id);
-
-        if (dto.getTitle() != null)       p.setTitle(dto.getTitle());
-        if (dto.getArea() != null)        p.setArea(dto.getArea());
-        if (dto.getCity() != null)        p.setCity(dto.getCity());
-        if (dto.getPrice() != null)       p.setPrice(dto.getPrice());
-        if (dto.getBhk() != null)         p.setBhk(dto.getBhk());
-        if (dto.getDescription() != null) p.setDescription(dto.getDescription());
-        if (dto.getMapLink() != null)     p.setMapLink(dto.getMapLink());
-        if (dto.getPhotos() != null)      p.setPhotos(dto.getPhotos());
-
-        repository.save(p);
-        return PropertyMapper.toDTO(p);
+        property.addPhotos(conv.getPhotos());
+        repository.save(property);
+        return property;
     }
 
     /* =========================
        READ
        ========================= */
+
     public PropertyResponseDTO get(Long id) {
         return PropertyMapper.toDTO(loadOwnedProperty(id));
     }
 
-    public List<PropertyResponseDTO> getAllForCurrentBroker() {
+    public List<PropertyResponseDTO> getAllForCurrentActor() {
+        ActorContext.requireCapability(Capability.ADD_PROPERTY);
 
-        Long brokerId = BrokerContext.id();
-        if (brokerId == null) throw new IllegalStateException("No broker in context");
+        Long accountId = ActorContext.get().internalId();
 
-        return repository.findByBrokerIdAndActiveTrue(brokerId)
+        return repository
+                .findByOwnerAccountIdAndActiveTrue(accountId)
                 .stream()
                 .map(PropertyMapper::toDTO)
                 .toList();
     }
 
-    /* =========================
-       DELETE (soft)
-       ========================= */
-    public void delete(Long id) {
-
-        Property p = loadOwnedProperty(id);
-        p.setActive(false);
-        repository.save(p);
+    public List<Property> findMatchesForSearchers(
+            String bhk,
+            String cityCode,
+            String localityCode,
+            Integer min,
+            Integer max
+    ) {
+        return repository.searchPublic(bhk, cityCode, localityCode, min, max);
     }
 
     /* =========================
-       MATCHING
+       DELETE (soft)
        ========================= */
-    public List<Property> findMatches(
-            String bhk,
-            String area,
-            Integer minBudget,
-            Integer maxBudget,
-            Long optionalBrokerId
-    ) {
 
-        Long brokerId = optionalBrokerId != null
-                ? optionalBrokerId
-                : BrokerContext.id();
-
-        if (brokerId == null) {
-            throw new IllegalStateException("No broker in context");
-        }
-
-        return repository.findMatches(
-                brokerId,
-                blankToNull(bhk),
-                blankToNull(area),
-                minBudget,
-                maxBudget
-        );
+    public void delete(Long id) {
+        Property property = loadOwnedProperty(id);
+        property.deactivate();
+        repository.save(property);
     }
 
     /* =========================
        INTERNAL HELPERS
        ========================= */
-    public Broker requireBroker() {
-        Broker broker = BrokerContext.get();
-        if (broker == null) {
-            throw new IllegalStateException("No broker in context");
-        }
-        return broker;
-    }
 
     private Property loadOwnedProperty(Long id) {
 
-        Property p = repository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Property not found: " + id));
+        Property property =
+                repository.findById(id)
+                        .orElseThrow(() ->
+                                new ResourceNotFoundException("Property not found: " + id));
 
-        Long brokerId = BrokerContext.id();
-        if (brokerId == null) {
-            throw new IllegalStateException("No broker in context");
+        Long accountId = ActorContext.get().internalId();
+        if (!property.getOwnerAccountId().equals(accountId)) {
+            throw new AccessDeniedException("Property does not belong to current actor");
         }
 
-        if (!p.getBroker().getId().equals(brokerId)) {
-            throw new AccessDeniedException("Property does not belong to current broker");
-        }
-
-        return p;
+        return property;
     }
 
-    private String blankToNull(String s) {
-        return (s == null || s.isBlank()) ? null : s;
+    private List<String> tokenizeArea(String area) {
+        if (area == null || area.isBlank()) {
+            return List.of();
+        }
+
+        return Arrays.stream(area.split("\\s+"))
+                .map(String::toLowerCase)
+                .toList();
+    }
+
+    private String normalizePath(String urlOrPath) {
+        if (urlOrPath.startsWith("http")) {
+            return URI.create(urlOrPath).getPath();
+        }
+        return urlOrPath;
+    }
+
+    private String buildTitle(BrokerConversation conv, ResolvedLocation rl) {
+        if (rl != null && rl.locality() != null) {
+            return conv.getBhk() + " in " + rl.locality();
+        }
+        return conv.getBhk() + " Property";
     }
 }
-

@@ -28,10 +28,12 @@ public class AdminPropertyController {
     // LIST PAGE
     @GetMapping
     public String listProperties(Model model) {
-        model.addAttribute("properties", service.getAllForCurrentBroker());
+//        model.addAttribute("properties", service.getAllForCurrentBroker());
         return "admin/property/list";
     }
 
+   
+    
     // NEW FORM PAGE
     @GetMapping("/new")
     public String showCreateForm(Model model) {
@@ -42,7 +44,7 @@ public class AdminPropertyController {
     // CREATE PROPERTY
     @PostMapping
     public String createProperty(@Validated @ModelAttribute("property") PropertyRequestDTO dto) {
-        service.create(dto);
+//        service.create(dto);
         return "redirect:/admin/properties";
     }
 
@@ -54,15 +56,15 @@ public class AdminPropertyController {
         return "admin/property/form";
     }
 
-    // UPDATE PROPERTY
-    @PostMapping("/{id}")
-    public String updateProperty(
-            @PathVariable Long id,
-            @Validated @ModelAttribute("property") PropertyRequestDTO dto
-    ) {
-        service.update(id, dto);
-        return "redirect:/admin/properties";
-    }
+//    // UPDATE PROPERTY
+//    @PostMapping("/{id}")
+//    public String updateProperty(
+//            @PathVariable Long id,
+//            @Validated @ModelAttribute("property") PropertyRequestDTO dto
+//    ) {
+//        service.update(id, dto);
+//        return "redirect:/admin/properties";
+//    }
 
     // DELETE (soft)
     @GetMapping("/delete/{id}")

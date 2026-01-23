@@ -7,44 +7,42 @@ import java.util.List;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
-import com.risingbee.realestate.converter.StringListJsonConverter;
-
+import jakarta.persistence.Access;
+import jakarta.persistence.AccessType;
 import jakarta.persistence.Column;
-import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
-import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
 import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
 
 @Entity
 @Table(name = "properties")
-@Getter @Setter
-@Builder
-@NoArgsConstructor
-@AllArgsConstructor
+@Getter
+@Access(AccessType.FIELD)
 public class Property {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "broker_id", nullable = false)
-    private Broker broker;
+    @Column(name = "fingerprint", unique = true)
+    private String fingerprint;
+
+    /* ======================
+       Ownership (actor-centric)
+       ====================== */
+
+    @Column(name = "owner_account_id", nullable = false, updatable = false)
+    private Long ownerAccountId;
+
+    /* ======================
+       Property details
+       ====================== */
 
     private String title;
     private String bhk;
-    private String area;
-    private String city;
     private Integer price;
 
     @Column(columnDefinition = "text")
@@ -52,14 +50,84 @@ public class Property {
 
     private String mapLink;
 
-    @Column(columnDefinition = "json")
+    @Column(columnDefinition = "jsonb")
     @JdbcTypeCode(SqlTypes.JSON)
-    @Convert(converter = StringListJsonConverter.class)
     private List<String> photos = new ArrayList<>();
 
     private boolean active = true;
 
     @Column(nullable = false, updatable = false)
-    private Instant createdAt = Instant.now();
-}
+    private Instant createdAt;
 
+    /* ======================
+       Location (canonical truth)
+       ====================== */
+
+    @Column(length = 32, nullable = false)
+    private String cityCode;
+
+    @Column(length = 128)
+    private String localityCode;
+
+    /* -----------------
+       JPA requirement
+       ----------------- */
+    protected Property() {}
+
+    /* -----------------
+       Domain construction
+       ----------------- */
+    public Property(
+            Long ownerAccountId,
+            String title,
+            String bhk,
+            Integer price,
+            String cityCode,
+            String localityCode
+    ) {
+        this.ownerAccountId = ownerAccountId;
+        this.title = title;
+        this.bhk = bhk;
+        this.price = price;
+        this.cityCode = cityCode;
+        this.localityCode = localityCode;
+        this.createdAt = Instant.now();
+        this.active = true;
+    }
+
+    /* -----------------
+       Domain mutation
+       ----------------- */
+
+    public void updateDetails(
+            String title,
+            Integer price,
+            String description,
+            String mapLink
+    ) {
+        if (title != null) this.title = title;
+        if (price != null) this.price = price;
+        if (description != null) this.description = description;
+        if (mapLink != null) this.mapLink = mapLink;
+    }
+
+    public void updateLocation(
+            String cityCode,
+            String localityCode
+    ) {
+        this.cityCode = cityCode;
+        this.localityCode = localityCode;
+    }
+
+    public void addPhotos(List<String> newPhotos) {
+        this.photos.addAll(newPhotos);
+    }
+
+    public void removePhotos(List<String> removePhotos) {
+        this.photos.removeAll(removePhotos);
+    }
+
+    public void deactivate() {
+        this.active = false;
+    }
+}

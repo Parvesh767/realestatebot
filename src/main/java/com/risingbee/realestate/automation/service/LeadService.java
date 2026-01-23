@@ -1,18 +1,19 @@
 package com.risingbee.realestate.automation.service;
 
-import com.risingbee.realestate.automation.domain.Lead;
-import com.risingbee.realestate.automation.domain.Broker;
-import com.risingbee.realestate.automation.repo.LeadRepository;
-import com.risingbee.realestate.automation.repo.BrokerRepository;
-import com.risingbee.realestate.automation.tenant.BrokerContext;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
+import java.util.List;
+import java.util.Optional;
+
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.Instant;
-import java.util.List;
-import java.util.Optional;
+import com.risingbee.realestate.automation.actor.ActorContext;
+import com.risingbee.realestate.automation.actor.enums.Capability;
+import com.risingbee.realestate.automation.domain.Lead;
+import com.risingbee.realestate.automation.domain.Property;
+import com.risingbee.realestate.automation.repo.LeadRepository;
+
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 @Service
@@ -20,50 +21,38 @@ import java.util.Optional;
 @Transactional
 public class LeadService {
 
-    private final LeadRepository leadRepository;
-    private final BrokerRepository brokerRepository;
-   
+	private final LeadRepository leadRepository;
 
-    public Lead createFromParsed(String phone, String rawMessage, String bhk, Integer minBudget, Integer maxBudget, String location,String city) {
-//        Broker broker = BrokerContext.get();
-//        if (broker == null) throw new IllegalStateException("No broker in context");
+	/**
+	 * Create a lead from a matched property. Works for OWNER or BROKER properties.
+	 */
+	public Lead createFromMatchedProperty(String phone, Property property, String rawMessage, String cityCode,
+			String localityCode) {
 
-        Broker contextBroker = BrokerContext.get();
-        if (contextBroker == null) {
-            throw new IllegalStateException("No broker in context");
-        }
+		Long ownerAccountId = property.getOwnerAccountId();
 
-        // 🔒 HARD CHECK
-        Broker broker = brokerRepository
-                .findById(contextBroker.getId())
-                .orElseThrow(() ->
-                    new IllegalStateException(
-                        "Broker not persisted or deleted: " + contextBroker.getId()
-                    )
-                );
-        Lead lead = Lead.builder()
-                .phoneNumber(phone)
-                .rawMessage(rawMessage)
-                .bhk(bhk)
-                .minBudget(minBudget)
-                .maxBudget(maxBudget)
-                .location(location)
-                .city(city)
-                .createdAt(Instant.now())
-                .broker(broker)
-                .build();
+		Lead lead = new Lead(phone, ownerAccountId, property.getBhk(), property.getPrice(), property.getPrice(),
+				cityCode, localityCode, rawMessage);
 
-        leadRepository.save(lead);
-        return lead;
-    }
+		return leadRepository.save(lead);
+	}
 
-    public List<Lead> findAllForCurrentBroker() {
-        Long brokerId = BrokerContext.id();
-        if (brokerId == null) throw new IllegalStateException("No broker in context");
-        return leadRepository.findByBrokerIdOrderByCreatedAtDesc(brokerId);
-    }
-    
-    public Optional<Lead> findLatestByPhone(String phone) {
-        return leadRepository.findTopByPhoneNumberOrderByCreatedAtDesc(phone);
-    }
+	/**
+	 * Find all leads for the current actor (OWNER or BROKER).
+	 */
+	public List<Lead> findAllForCurrentActor() {
+
+		ActorContext.requireCapability(Capability.ADD_PROPERTY);
+
+		Long accountId = ActorContext.get().internalId();
+		if (accountId == null) {
+			throw new IllegalStateException("Actor has no accountId");
+		}
+
+		return leadRepository.findByOwnerAccountIdOrderByCreatedAtDesc(accountId);
+	}
+
+	public Optional<Lead> findLatestByPhone(String phone) {
+		return leadRepository.findTopByPhoneNumberOrderByCreatedAtDesc(phone);
+	}
 }

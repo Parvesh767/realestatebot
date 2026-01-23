@@ -19,14 +19,20 @@ public class PropertyResponseDTO {
     private Long id;
     private String title;
     private String bhk;
-    private String area;
-    private String city;
-    private Integer price;
 
+    /** Canonical location (for filters / logic) */
+    private String cityCode;
+    private String localityCode;
+
+    /** Optional display string (NOT used for logic) */
+    private String displayLocation;
+
+    private Integer price;
     private String description;
     private String mapLink;
 
     private List<String> photos;
     private boolean active;
 }
+
 

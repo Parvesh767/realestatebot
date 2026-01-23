@@ -7,14 +7,16 @@ public class MessageRouter {
 
     public Route resolve(String message, boolean isBroker) {
 
-        if (isBroker && message != null && message.toLowerCase().startsWith("add")) {
+        if (!isBroker || message == null) {
+            return Route.UNKNOWN;
+        }
+
+        String text = message.trim().toLowerCase();
+
+        if (text.startsWith("add")) {
             return Route.ADD_PROPERTY;
         }
 
-        // broker-only commands
-        if (message.startsWith("add property")) {
-            return Route.ADD_PROPERTY;
-        }
         return Route.UNKNOWN;
     }
 

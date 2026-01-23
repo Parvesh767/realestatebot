@@ -1,8 +1,7 @@
 package com.risingbee.realestate.automation.interfaces;
 
-import com.risingbee.realestate.automation.domain.Broker;
+import com.risingbee.realestate.automation.actor.Actor;
 
 public interface BrokerOnboardingService {
-	  void handle(Broker broker, String message);
-
+    void handle(Actor actor, String message);
 }

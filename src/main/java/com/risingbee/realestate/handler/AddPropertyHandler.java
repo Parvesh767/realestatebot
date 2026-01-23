@@ -1,24 +1,20 @@
 package com.risingbee.realestate.handler;
 
-import java.time.Instant;
-import java.util.ArrayList;
 import java.util.Optional;
 
 import org.springframework.stereotype.Service;
 
+import com.risingbee.realestate.automation.actor.Actor;
 import com.risingbee.realestate.automation.domain.BrokerConversation;
-import com.risingbee.realestate.automation.domain.Property;
 import com.risingbee.realestate.automation.dto.MediaInput;
 import com.risingbee.realestate.automation.repo.BrokerConversationRepository;
-import com.risingbee.realestate.automation.repo.PropertyRepository;
 import com.risingbee.realestate.automation.service.PropertyService;
 import com.risingbee.realestate.automation.service.WhatsAppMediaService;
 import com.risingbee.realestate.automation.service.WhatsAppSender;
-import com.risingbee.realestate.automation.tenant.BrokerContext;
 import com.risingbee.realestate.enums.AddPropertyStep;
 import com.risingbee.realestate.flow.ConversationFlow;
+import com.risingbee.realestate.lifecycle.ConversationLifecycleManager;
 
-import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -27,253 +23,212 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class AddPropertyHandler {
 
-	private final BrokerConversationRepository conversationRepo;
-	private final WhatsAppSender whatsAppSender;
-	private final PropertyRepository propertyRepository;
-	private final WhatsAppMediaService mediaService;
-	private final PropertyService propertyService;
+    private final BrokerConversationRepository conversationRepo;
+    private final WhatsAppSender whatsAppSender;
+    private final WhatsAppMediaService mediaService;
+    private final PropertyService propertyService;
+    private final ConversationLifecycleManager lifecycleManager;
 
-	public void handle(String from, String message, Optional<MediaInput> mediaOpt) {
+ 
+    public void handle(
+    	    Actor actor,
+    	    String message,
+    	    Optional<MediaInput> mediaOpt,
+    	    Optional<String> messageIdOpt
+    	) {
 
-		Long brokerId = BrokerContext.id();
-		if (brokerId == null)
-			return;
+    	    Optional<BrokerConversation> convOpt =
+    	        lifecycleManager.acquire(
+    	            actor.internalId(),
+    	            ConversationFlow.ADD_PROPERTY,
+    	            messageIdOpt,
+    	            actor.externalId()
+    	        );
 
-		BrokerConversation conv = conversationRepo.findByBrokerIdAndFlow(brokerId, ConversationFlow.ADD_PROPERTY)
-				.orElseGet(() -> startNewConversation(brokerId));
+    	    if (convOpt.isEmpty()) return;
 
-		switch (conv.getStep()) {
-		case ASK_BHK -> handleBhk(conv, from, message);
-		case ASK_LOCATION -> handleLocation(conv, from, message);
-		case ASK_PRICE -> handlePrice(conv, from, message);
-		case ASK_PHOTOS -> handlePhotos(conv, from, message, mediaOpt);
-		case PREVIEW -> handlePreview(conv, from, message);
-		}
-	}
+    	    BrokerConversation conv = convOpt.get();
 
-	@Transactional
-	private void createProperty(BrokerConversation conv) {
-
-	    Property p = new Property();
-	    p.setBroker(BrokerContext.get());
-	    p.setBhk(conv.getBhk());
-	    p.setArea(conv.getArea());
-	    p.setPrice(conv.getPrice());
-
-	    // ✅ defensive copy (important)
-	    p.setPhotos(new ArrayList<>(conv.getPhotos()));
-
-	    p.setTitle(conv.getBhk() + " in " + conv.getArea());
-	    p.setActive(true);
-
-	    propertyRepository.save(p);
-	}
-
-	private BrokerConversation startNewConversation(Long brokerId) {
-		BrokerConversation c = new BrokerConversation();
-		c.setBrokerId(brokerId);
-		c.setFlow(ConversationFlow.ADD_PROPERTY);
-		c.setStep(AddPropertyStep.ASK_BHK);
-		conversationRepo.save(c);
-		return c;
-	}
-
-	private void handleBhk(BrokerConversation conv, String phone, String message) {
-		String bhk = message.toUpperCase().replaceAll("\\s+", "");
-
-		if (!bhk.matches("\\d+BHK")) {
-			whatsAppSender.sendTextMessage(phone, "Please enter valid BHK (e.g. 1BHK, 2BHK)");
-			return;
-		}
-
-		conv.setBhk(bhk);
-		conv.setStep(AddPropertyStep.ASK_LOCATION);
-		conv.setUpdatedAt(Instant.now());
-		conversationRepo.save(conv);
-
-		whatsAppSender.sendTextMessage(phone, "📍 What is the location? (e.g. Golf Course Road)");
-	}
-
-	private void handleLocation(BrokerConversation conv, String phone, String message) {
-		String location = message.trim();
-
-		if (location.length() < 3) {
-			whatsAppSender.sendTextMessage(phone, "Please enter a valid location (e.g. Golf Course Road)");
-			return;
-		}
-
-		conv.setArea(location);
-		conv.setStep(AddPropertyStep.ASK_PRICE);
-		conv.setUpdatedAt(Instant.now());
-		conversationRepo.save(conv);
-
-		whatsAppSender.sendTextMessage(phone, "💰 What is the monthly rent? (e.g. 24000)");
-	}
-
-	private void handlePrice(BrokerConversation conv, String phone, String message) {
-		String raw = message.toLowerCase().replaceAll("[^0-9k]", "");
-
-		if (raw.isBlank()) {
-			whatsAppSender.sendTextMessage(phone, "Please enter a valid rent amount (e.g. 24000 or 25k)");
-			return;
-		}
-
-		Integer price;
-		try {
-			if (raw.endsWith("k")) {
-				price = Integer.parseInt(raw.replace("k", "")) * 1000;
-			} else {
-				price = Integer.parseInt(raw);
-			}
-		} catch (NumberFormatException e) {
-			whatsAppSender.sendTextMessage(phone, "Invalid amount. Please enter numbers only (e.g. 24000)");
-			return;
-		}
-
-		if (price < 1000) {
-			whatsAppSender.sendTextMessage(phone, "Rent seems too low. Please confirm the monthly rent.");
-			return;
-		}
-
-		conv.setPrice(price);
-		conv.setStep(AddPropertyStep.ASK_PHOTOS);
-		conv.setUpdatedAt(Instant.now());
-		conversationRepo.save(conv);
-
-		whatsAppSender.sendTextMessage(phone, """
-				📸 Please send property photos now.
-
-				You can send multiple photos.
-				Type DONE when finished.
-				""");
-	}
+    	    switch (conv.getStep()) {
+    	        case ASK_BHK       -> handleBhk(conv, actor.externalId(), message);
+    	        case ASK_LOCATION  -> handleLocation(conv, actor.externalId(), message);
+    	        case ASK_PRICE     -> handlePrice(conv, actor.externalId(), message);
+    	        case ASK_PHOTOS    -> handlePhotos(conv, actor.externalId(), message, mediaOpt);
+    	        case PREVIEW       -> handlePreview(conv, actor.externalId(), message);
+    	        default            -> sendError(actor.externalId());
+    	    }
+    	}
 
 
-	private void handlePhotos(
-	        BrokerConversation conv,
-	        String from,
-	        String message,
-	        Optional<MediaInput> mediaOpt
-	) {
+    
+   
+    
+    /* ---------------- STEP HANDLERS ---------------- */
+    
+    
+    
 
-	    // 1️⃣ Image upload (highest priority)
-	    if (mediaOpt.isPresent()) {
+    private void handleBhk(
+        BrokerConversation conv,
+        String phone,
+        String message
+    ) {
+        String bhk = message.toUpperCase().replaceAll("\\s+", "");
 
-	        String storedPath = mediaService.downloadAndStore(mediaOpt.get());
-	        conv.addPhoto(storedPath);
-	        conv.setUpdatedAt(Instant.now());
-	        conversationRepo.save(conv);
+        if (!bhk.matches("\\d+BHK")) {
+            send(phone, "Please enter valid BHK (e.g. 1BHK, 2BHK)");
+            return;
+        }
 
-	        whatsAppSender.sendTextMessage(
-	            from,
-	            "📷 Photo added. Send more photos or type *DONE*"
-	        );
-	        return;
-	    }
+        conv.setBhk(bhk);
+        conv.setStep(AddPropertyStep.ASK_LOCATION);
+        conversationRepo.save(conv);
 
-	    // 2️⃣ DONE command → move to PREVIEW
-	    if (message != null && message.equalsIgnoreCase("DONE")) {
+        send(phone, "📍 What is the location? (e.g. Golf Course Road)");
+    }
 
-	        if (conv.getPhotos().isEmpty()) {
-	            whatsAppSender.sendTextMessage(
-	                from,
-	                "❌ Please upload at least one photo before continuing."
-	            );
-	            return;
-	        }
+    private void handleLocation(
+        BrokerConversation conv,
+        String phone,
+        String message
+    ) {
+        if (message == null || message.trim().length() < 3) {
+            send(phone, "Please enter a valid location (e.g. Golf Course Road)");
+            return;
+        }
 
-	        conv.setStep(AddPropertyStep.PREVIEW);
-	        conv.setUpdatedAt(Instant.now());
-	        conversationRepo.save(conv);
+        conv.setArea(message.trim());
+        conv.setStep(AddPropertyStep.ASK_PRICE);
+        conversationRepo.save(conv);
 
-	        whatsAppSender.sendTextMessage(from, buildPreview(conv));
-	        whatsAppSender.sendTextMessage(
-	            from,
-	            "✅ Type *CONFIRM* to publish\n❌ Type *CANCEL* to discard"
-	        );
-	        return;
-	    }
+        send(phone, "💰 What is the monthly rent? (e.g. 24000)");
+    }
 
-	    // 3️⃣ Invalid input
-	    whatsAppSender.sendTextMessage(
-	        from,
-	        "📸 Please send property photos or type *DONE* when finished."
-	    );
-	}
+    private void handlePrice(
+        BrokerConversation conv,
+        String phone,
+        String message
+    ) {
+        Integer price;
 
-	
-	private String buildPreview(BrokerConversation conv) {
+        try {
+            String raw = message.toLowerCase().replaceAll("[^0-9k]", "");
+            price = raw.endsWith("k")
+                ? Integer.parseInt(raw.replace("k", "")) * 1000
+                : Integer.parseInt(raw);
+        } catch (Exception e) {
+            send(phone, "Invalid amount. Please enter numbers only (e.g. 24000)");
+            return;
+        }
 
-	    StringBuilder sb = new StringBuilder();
+        if (price < 1000) {
+            send(phone, "Rent seems too low. Please confirm the monthly rent.");
+            return;
+        }
 
-	    sb.append("🏠 *Property Preview*\n\n");
-	    sb.append("• BHK: ").append(conv.getBhk()).append("\n");
-	    sb.append("• Area: ").append(conv.getArea()).append("\n");
-	    sb.append("• Price: ₹").append(conv.getPrice()).append("\n");
-	    sb.append("• Photos: ").append(conv.getPhotos().size()).append("\n\n");
+        conv.setPrice(price);
+        conv.setStep(AddPropertyStep.ASK_PHOTOS);
+        conversationRepo.save(conv);
 
-	    sb.append("Is everything correct?");
+        send(
+            phone,
+            """
+            📸 Please send property photos now.
+            You can send multiple photos.
+            Type DONE when finished.
+            """
+        );
+    }
 
-	    return sb.toString();
-	}
+    private void handlePhotos(
+        BrokerConversation conv,
+        String phone,
+        String message,
+        Optional<MediaInput> mediaOpt
+    ) {
 
-	
-	private void handlePreview(BrokerConversation conv, String from, String message) {
+        if (mediaOpt.isPresent()) {
+            String path = mediaService.downloadAndStore(mediaOpt.get());
+            conv.addPhoto(path);
+            conversationRepo.save(conv);
 
-		if (message == null) {
-			sendPreviewHint(from);
-			return;
-		}
+            send(phone, "📷 Photo added. Send more photos or type *DONE*");
+            return;
+        }
 
-		switch (message.trim().toUpperCase()) {
+        if ("DONE".equalsIgnoreCase(message)) {
+            if (conv.getPhotos().isEmpty()) {
+                send(phone, "❌ Please upload at least one photo.");
+                return;
+            }
 
-		case "CONFIRM" -> {
-			createProperty(conv);
-			conversationRepo.delete(conv);
+            conv.setStep(AddPropertyStep.PREVIEW);
+            conversationRepo.save(conv);
 
-			whatsAppSender.sendTextMessage(from, "🎉 *Property published successfully!*");
-		}
+            send(phone, buildPreview(conv));
+            send(phone, "✅ Type *CONFIRM* to publish\n❌ Type *CANCEL* to discard");
+            return;
+        }
 
-		case "CANCEL" -> {
-			conversationRepo.delete(conv);
+        send(phone, "📸 Please send property photos or type *DONE*.");
+    }
 
-			whatsAppSender.sendTextMessage(from, "❌ Property creation cancelled.");
-		}
+    private void handlePreview(
+        BrokerConversation conv,
+        String phone,
+        String message
+    ) {
+        if (message == null) {
+            sendPreviewHint(phone);
+            return;
+        }
 
-		default -> sendPreviewHint(from);
-		}
-	}
+        switch (message.trim().toUpperCase()) {
 
-	private void sendPreviewHint(String phone) {
-		whatsAppSender.sendTextMessage(phone, "⚠️ Please type *CONFIRM* to publish or *CANCEL* to discard.");
-	}
+            case "CONFIRM" -> {
+                propertyService.createFromConversation(conv);
+                conversationRepo.delete(conv);
+                send(phone, "🎉 *Property published successfully!*");
+            }
 
-	@Transactional
-	public void handleConfirm(BrokerConversation conv) {
+            case "CANCEL" -> {
+                conversationRepo.delete(conv);
+                send(phone, "❌ Property creation cancelled.");
+            }
 
-		if (conv.getStep() != AddPropertyStep.PREVIEW) {
-			return; // idempotent safety
-		}
+            default -> sendPreviewHint(phone);
+        }
+    }
 
-		Property property = Property.builder().broker(propertyService.requireBroker())
-				.title(conv.getBhk() + " in " + conv.getArea()).bhk(conv.getBhk()).area(conv.getArea())
-				.price(conv.getPrice()).photos(new ArrayList<>(conv.getPhotos())).active(true).build();
+    /* ---------------- HELPERS ---------------- */
 
-		propertyRepository.save(property);
+    private String buildPreview(BrokerConversation conv) {
+        return """
+            🏠 *Property Preview*
 
-		// cleanup
-		conversationRepo.delete(conv);
+            • BHK: %s
+            • Area: %s
+            • Price: ₹%d
+            • Photos: %d
 
-		whatsAppSender.sendTextMessage(propertyService.requireBroker().getPhone(),
-				"🎉 *Property Published Successfully!*");
-	}
+            Is everything correct?
+            """.formatted(
+                conv.getBhk(),
+                conv.getArea(),
+                conv.getPrice(),
+                conv.getPhotos().size()
+        );
+    }
 
-	@Transactional
-	public void handleCancel(BrokerConversation conv) {
+    private void sendPreviewHint(String phone) {
+        send(phone, "⚠️ Type *CONFIRM* to publish or *CANCEL* to discard.");
+    }
 
-		conversationRepo.delete(conv);
+    private void sendError(String phone) {
+        send(phone, "Something went wrong. Please try again.");
+    }
 
-		whatsAppSender.sendTextMessage(propertyService.requireBroker().getPhone(), "❌ Property creation cancelled.");
-	}
-
+    private void send(String phone, String message) {
+        whatsAppSender.sendTextMessage(phone, message);
+    }
 }

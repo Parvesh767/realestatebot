@@ -1,19 +1,16 @@
 package com.risingbee.realestate.automation.service;
 
 
-import lombok.RequiredArgsConstructor;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
-import com.risingbee.realestate.automation.repo.LeadRepository;
+import lombok.RequiredArgsConstructor;
 
 @Component
 @RequiredArgsConstructor
 public class FollowUpScheduler {
 
-    private final LeadRepository leadRepository;
-    private final WhatsAppSender whatsAppSender;
-
+   
     // run every hour
     @Scheduled(fixedRateString = "PT1H")
     public void runFollowUps() {
