@@ -43,7 +43,7 @@ public class Property {
 
     private String title;
     private String bhk;
-    private Integer price;
+    private Long price; // 🔑 Upgraded to Long for INR Crore/Lakh handling
 
     @Column(columnDefinition = "text")
     private String description;
@@ -69,19 +69,13 @@ public class Property {
     @Column(length = 128)
     private String localityCode;
 
-    /* -----------------
-       JPA requirement
-       ----------------- */
     protected Property() {}
 
-    /* -----------------
-       Domain construction
-       ----------------- */
     public Property(
             Long ownerAccountId,
             String title,
             String bhk,
-            Integer price,
+            Long price,
             String cityCode,
             String localityCode
     ) {
@@ -95,13 +89,9 @@ public class Property {
         this.active = true;
     }
 
-    /* -----------------
-       Domain mutation
-       ----------------- */
-
     public void updateDetails(
             String title,
-            Integer price,
+            Long price,
             String description,
             String mapLink
     ) {
@@ -120,11 +110,15 @@ public class Property {
     }
 
     public void addPhotos(List<String> newPhotos) {
-        this.photos.addAll(newPhotos);
+        if (newPhotos != null) {
+            this.photos.addAll(newPhotos);
+        }
     }
 
     public void removePhotos(List<String> removePhotos) {
-        this.photos.removeAll(removePhotos);
+        if (removePhotos != null) {
+            this.photos.removeAll(removePhotos);
+        }
     }
 
     public void deactivate() {

@@ -10,6 +10,8 @@ import com.risingbee.realestate.automation.service.storage_service.StorageServic
 
 import lombok.NoArgsConstructor;
 import lombok.RequiredArgsConstructor;
+import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 @Service @RequiredArgsConstructor 
 public class WhatsAppMediaService {
@@ -23,30 +25,29 @@ public class WhatsAppMediaService {
 
     public String downloadAndStore(MediaInput media) {
 
-        WhatsAppMediaMeta meta = getMediaMeta(media.mediaId());
-        byte[] bytes = download(meta.url());
-
-        return storageService.store(bytes, media.mimeType());
+        return Mono.defer(() ->
+                getMediaMeta(media.mediaId())
+                    .flatMap(meta -> download(meta.url()))
+                    .map(bytes -> storageService.store(bytes, media.mimeType()))
+            )
+            .subscribeOn(Schedulers.boundedElastic()) // 👈 CRITICAL
+            .block();
     }
 
-    private WhatsAppMediaMeta getMediaMeta(String mediaId) {
-
+    private Mono<WhatsAppMediaMeta> getMediaMeta(String mediaId) {
         return webClient.get()
             .uri("https://graph.facebook.com/v20.0/{id}", mediaId)
             .header("Authorization", "Bearer " + token)
             .retrieve()
-            .bodyToMono(WhatsAppMediaMeta.class)
-            .block();
+            .bodyToMono(WhatsAppMediaMeta.class);
     }
 
-    private byte[] download(String url) {
-
+    private Mono<byte[]> download(String url) {
         return webClient.get()
             .uri(url)
             .header("Authorization", "Bearer " + token)
             .retrieve()
-            .bodyToMono(byte[].class)
-            .block();
+            .bodyToMono(byte[].class);
     }
 }
 

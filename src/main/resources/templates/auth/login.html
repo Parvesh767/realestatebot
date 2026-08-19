@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - YeleRent</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome Icons -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+</head>
+<body class="bg-slate-50 font-sans text-slate-800 antialiased min-h-screen flex flex-col justify-between">
+
+    <!-- Top Navigation Bar -->
+    <header class="bg-white/80 backdrop-blur-md border-b border-slate-100 sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-md shadow-indigo-200">
+                    <i class="fa-solid fa-house-circle-check text-lg"></i>
+                </div>
+                <span class="font-bold text-xl text-slate-900 tracking-tight">YeleRent</span>
+            </div>
+            <a th:href="@{/search}" class="text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2.5 rounded-xl transition-all border border-slate-200 flex items-center">
+                <i class="fa-solid fa-arrow-left me-2 text-indigo-500"></i>Back to Home
+            </a>
+        </div>
+    </header>
+
+    <!-- Main Content Container -->
+    <main class="max-w-md mx-auto px-6 py-12 w-full my-auto">
+        <div class="bg-white rounded-3xl shadow-xl shadow-slate-200/60 border border-slate-100 overflow-hidden">
+            
+            <!-- Header Banner -->
+            <div class="bg-gradient-to-r from-indigo-600 to-blue-600 p-8 text-white text-center space-y-2">
+                <div class="w-12 h-12 bg-white/10 backdrop-blur-md rounded-2xl flex items-center justify-center mx-auto border border-white/20">
+                    <i class="fa-solid fa-shield-halved text-2xl text-indigo-200"></i>
+                </div>
+                <h2 class="text-2xl font-bold tracking-tight">Welcome Back</h2>
+                <p class="text-indigo-100 text-xs">Enter your registered mobile number to receive a one-time verification code.</p>
+            </div>
+
+            <!-- Login Form -->
+            <form method="post" action="/web/auth/send-otp" class="p-8 space-y-6">
+                
+                <div class="space-y-2">
+                    <label for="phone" class="block text-xs font-bold uppercase tracking-wider text-slate-500">
+                        Phone Number
+                    </label>
+                    <div class="relative rounded-2xl shadow-sm">
+                        <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400">
+                            <i class="fa-solid fa-phone text-sm"></i>
+                        </div>
+                        <input type="tel"
+                               id="phone"
+                               name="phone"
+                               placeholder="e.g. 919876543210"
+                               pattern="[0-9]{10,12}"
+                               required
+                               class="w-full pl-11 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all text-sm font-medium" />
+                    </div>
+                    <p class="text-[11px] text-slate-400">Include country code (e.g., 91 for India).</p>
+                </div>
+
+                <!-- Submit Button -->
+                <button type="submit" 
+                        class="w-full py-3.5 px-6 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold text-sm rounded-2xl shadow-lg shadow-indigo-200 hover:shadow-indigo-300 transition-all flex items-center justify-center group">
+                    <span>Send Verification Code</span>
+                    <i class="fa-solid fa-arrow-right ms-2 text-xs group-hover:translate-x-1 transition-transform"></i>
+                </button>
+
+            </form>
+
+            <!-- Bottom Disclaimer / Help -->
+            <div class="bg-slate-50 px-8 py-4 border-t border-slate-100 text-center">
+                <p class="text-xs text-slate-400">
+                    <i class="fa-solid fa-lock me-1 text-slate-400"></i> Secure OTP verification
+                </p>
+            </div>
+
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="border-t border-slate-100 py-6 text-center text-xs text-slate-400 bg-white">
+        <p>© 2026 YeleRent. Smart Property Search Platform.</p>
+    </footer>
+
+</body>
+</html>

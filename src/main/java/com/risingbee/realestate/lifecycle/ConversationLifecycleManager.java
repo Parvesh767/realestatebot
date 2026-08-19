@@ -34,7 +34,8 @@ public class ConversationLifecycleManager {
             conversationRepo
                 .findByOwnerAccountIdAndFlow(ownerAccountId, flow)
                 .orElseGet(() -> create(ownerAccountId, flow));
-
+      
+        
         // 1️⃣ Expiry check
         if (isExpired(conv)) {
             conversationRepo.delete(conv);
@@ -44,23 +45,25 @@ public class ConversationLifecycleManager {
                 ownerAccountId,
                 flow
             );
+            
+         
 
-            return Optional.of(create(ownerAccountId, flow));
+            return Optional.of(conv);
         }
 
         // 2️⃣ Idempotency check
-        if (messageId.isPresent()) {
-            boolean fresh =
-                conv.markMessageProcessed(messageId.get());
-
-            if (!fresh) {
-                log.info(
-                    "Duplicate message ignored: {}",
-                    messageId.get()
-                );
-                return Optional.empty();
-            }
-        }
+//        if (messageId.isPresent()) {
+//            boolean fresh =
+//                conv.markMessageProcessed(messageId.get());
+//
+//            if (!fresh) {
+//                log.info(
+//                    "Duplicate message ignored: {}",
+//                    messageId.get()
+//                );
+//                return Optional.empty();
+//            }
+//        }
 
         conversationRepo.save(conv);
         return Optional.of(conv);
@@ -76,7 +79,7 @@ public class ConversationLifecycleManager {
         ConversationFlow flow
     ) {
         BrokerConversation conv =
-            BrokerConversation.start(ownerAccountId, flow);
+            BrokerConversation.createForAccount(ownerAccountId);
 
         return conversationRepo.save(conv);
     }

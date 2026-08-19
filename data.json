@@ -1,0 +1,10 @@
+{
+  "title": "3BHK Luxury super Apartment",
+  "bhk": "3BHK",
+  "cityCode": "DEL",
+  "localityCode": "ROHINI",
+  "price": 120000,
+  "description": "Spacious and well ventilated",
+  "mapLink": "https://maps.google.com/example",
+  "active": true
+}

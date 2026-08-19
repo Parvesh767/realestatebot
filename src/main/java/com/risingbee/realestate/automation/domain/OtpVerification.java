@@ -2,6 +2,8 @@ package com.risingbee.realestate.automation.domain;
 
 import java.time.Instant;
 
+import com.risingbee.realestate.auth.dto.OtpPurpose;
+
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -22,6 +24,7 @@ public class OtpVerification {
 	private String otp;
 	private Instant expiresAt;
 	private boolean used = false;
+	OtpPurpose purpose;
 
 	/*
 	 * ----------------- JPA requirement -----------------
@@ -37,6 +40,7 @@ public class OtpVerification {
 		this.otp = otp;
 		this.expiresAt = expiresAt;
 		this.used = false;
+//		this.purpose = purpose;
 	}
 
 	/*

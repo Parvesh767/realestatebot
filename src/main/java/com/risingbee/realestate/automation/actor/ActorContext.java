@@ -44,6 +44,7 @@ public final class ActorContext {
         if (actor == null) {
             log.trace("ActorContext GET → null (no actor set)");
         }
+        log.info("ActorContext GET → {} "  , actor);
         return actor;
     }
 
@@ -64,7 +65,7 @@ public final class ActorContext {
     public static boolean hasCapability(Capability capability) {
         Actor actor = get();
         return actor != null &&
-               ActorCapabilities.allows(actor.type(), capability);
+               ActorCapabilities.allows(actor.role(), capability);
     }
 
     public static void requireCapability(Capability capability) {
@@ -72,7 +73,7 @@ public final class ActorContext {
         if (actor == null) {
             throw new IllegalStateException("No actor in context");
         }
-        if (!ActorCapabilities.allows(actor.type(), capability)) {
+        if (!ActorCapabilities.allows(actor.role(), capability)) {
             throw new IllegalStateException(
                 "Actor " + actor + " lacks capability " + capability
             );

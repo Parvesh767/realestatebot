@@ -24,10 +24,10 @@ public final class PropertyFingerprint {
 
         String raw = String.join("|",
             broker.getId().toString(),
-            safe(conv.getBhk()),
+            safe(conv.get("bhk",String.class)),
             safe(cityCode),
             safe(localityCode),
-            String.valueOf(conv.getPrice())
+            String.valueOf(conv.get("price",Integer.class))
         );
 
         return sha256(raw);

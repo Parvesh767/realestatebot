@@ -1,9 +1,8 @@
 package com.risingbee.realestate.enums;
 
 public enum BrokerOnboardingStep {
-    START,
-    AREAS,
-    BUDGET,
-    BHK,
-    DONE
+    ASK_AREAS,
+    ASK_BUDGET,
+    ASK_BHK,
+    CONFIRM
 }

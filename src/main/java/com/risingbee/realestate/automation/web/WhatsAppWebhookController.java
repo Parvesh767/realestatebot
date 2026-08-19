@@ -43,7 +43,7 @@ import lombok.extern.slf4j.Slf4j;
                 @RequestParam(name = "hub.verify_token", required = false) String token
         ) {
         	
-        	log.info("Actor resolved in context = {}", ActorContext.get());
+//        	log.info("Actor resolved in context = {}", ActorContext.get());
             log.info("Webhook verification request → mode={}, token={}", mode, token);
 
             if ("subscribe".equals(mode) && verifyToken.equals(token)) {
@@ -62,17 +62,23 @@ import lombok.extern.slf4j.Slf4j;
         public ResponseEntity<String> receiveMessage(
                 @RequestBody Map<String, Object> payload
         ) {
-            log.info("Incoming payload = {}", payload);
+            log.info("Incoming WhatsApp webhook");
 
-            if (!extractor.isUserMessageEvent(payload)) {
-                log.debug("Ignoring non-message webhook");
+            try {
+                if (!extractor.isUserMessageEvent(payload)) {
+                    return ResponseEntity.ok("IGNORED");
+                }
+
+                // async fire
+                whatsAppService.handleIncoming(payload);
+
                 return ResponseEntity.ok("EVENT_RECEIVED");
+
+            } catch (Exception e) {
+                log.error("Webhook processing failed", e);
+                return ResponseEntity.ok("EVENT_RECEIVED"); // prevent retries
             }
-            
-            whatsAppService.handleIncoming(payload);
-            return ResponseEntity.ok("EVENT_RECEIVED");
         }
-        
         
         
 //        @GetMapping("/createNewBroker")

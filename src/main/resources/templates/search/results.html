@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Matched Listings — Smart Property Search</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col justify-between antialiased">
+
+  <header class="border-b border-slate-800 bg-slate-900/60 sticky top-0 z-50 backdrop-blur-md">
+    <div class="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+      <a href="/search" class="flex items-center gap-3">
+        <div class="h-9 w-9 rounded-xl bg-indigo-600 flex items-center justify-center text-white">
+          <i data-lucide="home" class="w-5 h-5"></i>
+        </div>
+        <span class="font-bold text-lg text-white">Property Hub</span>
+      </a>
+
+      <a th:href="@{/search}" class="text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 px-4 py-2 rounded-xl transition border border-slate-700 flex items-center gap-2">
+        <i data-lucide="search" class="w-3.5 h-3.5 text-indigo-400"></i>
+        Modify Search
+      </a>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-6 py-10 w-full my-auto">
+    <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
+      <div>
+        <h1 class="text-2xl font-bold text-white">Matched Properties</h1>
+        <p class="text-xs text-slate-400 mt-1">Direct matches based on your criteria</p>
+      </div>
+
+      <div th:if="${!#lists.isEmpty(results)}" class="px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold inline-flex items-center gap-2">
+        <i data-lucide="check-circle-2" class="w-3.5 h-3.5"></i>
+        <span th:text="${#lists.size(results)} + ' Available Listings'">0 Available</span>
+      </div>
+    </div>
+
+    <!-- Empty State -->
+    <div th:if="${#lists.isEmpty(results)}" class="bg-slate-900/60 border border-slate-800 rounded-3xl p-12 text-center max-w-md mx-auto my-8 space-y-4">
+      <div class="w-12 h-12 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 flex items-center justify-center mx-auto">
+        <i data-lucide="building-2" class="w-6 h-6"></i>
+      </div>
+      <h2 class="text-base font-bold text-white">No Direct Matches Found</h2>
+      <p class="text-xs text-slate-400">Try expanding your budget parameters or searching adjacent localities.</p>
+      <a th:href="@{/search}" class="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold transition">
+        <i data-lucide="arrow-left" class="w-3.5 h-3.5"></i> Try Another Search
+      </a>
+    </div>
+
+    <!-- Property Grid -->
+    <div th:if="${!#lists.isEmpty(results)}" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div th:each="p : ${results}" class="bg-slate-900/80 border border-slate-800 hover:border-slate-700 rounded-2xl overflow-hidden flex flex-col justify-between transition-all duration-200 hover:-translate-y-0.5 shadow-lg group">
+        
+        <!-- Media Container -->
+        <div class="relative h-48 bg-slate-800 overflow-hidden">
+          <img th:if="${p.photos != null and !p.photos.empty}" 
+               th:src="${p.photos[0]}" 
+               alt="Property Image" 
+               class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" 
+               onerror="this.src='https://placehold.co/600x400/1e293b/94a3b8?text=Property+Photo'" />
+          <img th:if="${p.photos == null or p.photos.empty}" 
+               src="https://placehold.co/600x400/1e293b/94a3b8?text=Property+Photo" 
+               alt="Placeholder" 
+               class="w-full h-full object-cover" />
+
+          <span class="absolute top-3 left-3 bg-slate-950/80 backdrop-blur text-white text-[11px] font-bold px-2.5 py-1 rounded-lg border border-slate-700/60"
+                th:text="${p.bhk != null ? p.bhk : 'Listing'}">2 BHK</span>
+
+          <span class="absolute bottom-3 right-3 bg-emerald-500 text-slate-950 text-xs font-extrabold px-2.5 py-1 rounded-lg">
+            ₹ <span th:text="${p.price != null ? #numbers.formatInteger(p.price, 0, 'COMMA') : '0'}">0</span> / mo
+          </span>
+        </div>
+
+        <!-- Listing Details -->
+        <div class="p-5 space-y-4 flex-1 flex flex-col justify-between">
+          <div class="space-y-2">
+            <h2 class="font-bold text-white text-base line-clamp-1 group-hover:text-indigo-400 transition"
+                th:text="${p.title != null ? p.title : (p.bhk + ' in ' + p.localityCode)}">
+              Property Title
+            </h2>
+            
+            <p class="text-xs text-slate-400 flex items-center gap-1.5">
+              <i data-lucide="map-pin" class="w-3.5 h-3.5 text-indigo-400 shrink-0"></i>
+              <span th:text="${(p.localityCode != null ? p.localityCode : '') + (p.cityCode != null ? ', ' + p.cityCode : '')}">Sector 49, Gurgaon</span>
+            </p>
+
+            <p th:if="${p.description != null}" th:text="${p.description}" class="text-xs text-slate-400 line-clamp-2 leading-relaxed"></p>
+          </div>
+
+          <!-- Direct WhatsApp Connect Link -->
+          <a th:href="'https://wa.me/918847084526?text=' + ${#uris.escapePathSegment('Hi, I am interested in Property #' + p.id + ' (' + p.bhk + ' in ' + p.localityCode + ' for ₹' + p.price + ')')}" 
+             target="_blank"
+             class="w-full py-2.5 px-4 bg-indigo-600/10 hover:bg-indigo-600 text-indigo-400 hover:text-white font-semibold text-xs rounded-xl border border-indigo-500/20 hover:border-indigo-600 transition flex items-center justify-center gap-2">
+            <i data-lucide="message-square" class="w-3.5 h-3.5"></i>
+            Connect on WhatsApp
+          </a>
+        </div>
+
+      </div>
+    </div>
+  </main>
+
+  <footer class="border-t border-slate-800 py-6 text-center text-xs text-slate-500">
+    <p>Smart Property Automation & Matching Engine</p>
+  </footer>
+
+  <script>
+    lucide.createIcons();
+  </script>
+</body>
+</html>

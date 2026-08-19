@@ -14,12 +14,14 @@ public class PropertyMapper {
             PropertyRequestDTO dto,
             Long ownerAccountId
     ) {
+        // 🔑 Safe conversion from Integer/Double/Number to Long
+        Long priceLong = dto.getPrice() != null ? dto.getPrice().longValue() : null;
 
         Property property = new Property(
                 ownerAccountId,
                 resolveTitle(dto),
                 dto.getBhk(),
-                dto.getPrice(),
+                priceLong,
                 dto.getCityCode(),
                 dto.getLocalityCode()
         );
@@ -97,9 +99,12 @@ public class PropertyMapper {
                 dto.getDescription() != null ||
                 dto.getMapLink() != null
         ) {
+            // 🔑 Safe conversion from Integer/Double/Number to Long
+            Long priceLong = dto.getPrice() != null ? dto.getPrice().longValue() : property.getPrice();
+
             property.updateDetails(
-                    dto.getTitle(),
-                    dto.getPrice(),
+                    dto.getTitle() != null ? dto.getTitle() : property.getTitle(),
+                    priceLong,
                     dto.getDescription(),
                     dto.getMapLink()
             );

@@ -25,40 +25,42 @@ public class ActorResolver {
      * Resolve Actor from incoming WhatsApp payload.
      * Identity-only. No business logic. No enforcement.
      */
-    public Optional<Actor> resolve(Map<String, Object> payload) {
 
-        Optional<String> phoneOpt = extractor.extractPhone(payload);
+        public Optional<Actor> resolve(Map<String, Object> payload) {
 
-        if (phoneOpt.isEmpty()) {
-            log.warn("ActorResolver: no phone found in payload");
-            return Optional.empty();
-        }
+            Optional<String> phoneOpt = extractor.extractPhone(payload);
 
-        String phone = phoneOpt.get();
+            if (phoneOpt.isEmpty()) {
+                log.warn("ActorResolver: no phone found in payload");
+                return Optional.empty();
+            }
 
-        Optional<Account> accountOpt = accountRepository.findByPhone(phone);
+            String phone = phoneOpt.get();
 
-        if (accountOpt.isPresent()) {
-            Account account = accountOpt.get();
+            Optional<Account> accountOpt =
+                    accountRepository.findByExternalId(phone);
 
+            if (accountOpt.isPresent()) {
+                Account account = accountOpt.get();
+
+                Actor actor = new Actor(
+                        account.getType(),   // OWNER / BROKER
+                        phone,
+                        account.getId()
+                );
+
+                log.debug("ActorResolver: resolved ACCOUNT → {}", actor);
+                return Optional.of(actor);
+            }
+
+            // ✅ Anonymous actor (NOT USER)
             Actor actor = new Actor(
-                    account.getType(),   // USER / OWNER / BROKER
+                    null,   // no role yet
                     phone,
-                    account.getId()
+                    null
             );
 
-            log.debug("ActorResolver: resolved ACCOUNT → {}", actor);
+            log.debug("ActorResolver: resolved ANONYMOUS → {}", actor);
             return Optional.of(actor);
-        }
-
-        // No account yet → USER by default
-        Actor actor = new Actor(
-                ActorType.USER,
-                phone,
-                null
-        );
-
-        log.debug("ActorResolver: resolved USER (no account) → {}", actor);
-        return Optional.of(actor);
     }
 }

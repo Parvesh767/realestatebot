@@ -27,7 +27,7 @@ public class PropertyResponseDTO {
     /** Optional display string (NOT used for logic) */
     private String displayLocation;
 
-    private Integer price;
+    private Long price;
     private String description;
     private String mapLink;
 

@@ -1,7 +1,11 @@
 package com.risingbee.realestate.auth.dto;
 
-public record VerifyOtpRequest(
-		String phone,
-		String otp) {
+import com.risingbee.realestate.automation.actor.enums.ActorType;
 
-}
+public record VerifyOtpRequest(
+	    String phone,
+	    String otp,
+	    String name,  
+	    String email,
+	    ActorType role   
+	) {}

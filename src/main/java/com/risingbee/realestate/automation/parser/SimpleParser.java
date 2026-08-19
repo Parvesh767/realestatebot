@@ -1,90 +1,41 @@
 package com.risingbee.realestate.automation.parser;
 
-import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
 public class SimpleParser {
 
-    private static final Pattern BHK_PATTERN =
-            Pattern.compile("(\\d+(?:\\.5)?)\\s*(bhk|bedroom|bed)");
-
-    private static final Pattern BUDGET_PATTERN =
-            Pattern.compile("(under|below|less than|over|above|more than)?\\s*(\\d{2,7})(k|K)?");
+    private static final Pattern BHK_PATTERN = Pattern.compile("(?i)(\\d+(?:\\.5)?)\\s*(bhk|bedroom|bed)");
+    private static final Pattern CRORE_PATTERN = Pattern.compile("(?i)(\\d+(?:\\.\\d+)?)\\s*(cr|crore|crores)");
+    private static final Pattern LAKH_PATTERN = Pattern.compile("(?i)(\\d+(?:\\.\\d+)?)\\s*(l|lac|lakh|lakhs)");
+    private static final Pattern THOUSAND_PATTERN = Pattern.compile("(?i)(\\d+)\\s*(k|thousand)");
 
     public static ParsedRequest parse(String message) {
-
         if (message == null || message.isBlank()) {
-            return new ParsedRequest(
-                null,
-                null,
-                null,
-                null,
-                "",
-                List.of(),
-                false
-            );
+            return new ParsedRequest(null, null, null, List.of(), "", List.of(), message);
         }
 
-        String normalized = normalize(message);
+        String normalized = message.toLowerCase().replaceAll("[^a-z0-9.]", " ").replaceAll("\\s+", " ").trim();
         List<String> tokens = List.of(normalized.split(" "));
 
         String bhk = extractBhk(normalized);
-        Integer[] budget = extractBudget(normalized);
+        Double[] budget = extractBudget(normalized); // [min, max]
 
-        // 🔑 weak, fuzzy location signal
-        List<String> location = extractLocationCandidates(tokens);
-
-        // Search intent = structured requirement
-        boolean hasSearchIntent =
-            bhk != null &&
-            (budget[0] != null || budget[1] != null) &&
-            location.isEmpty() ;
-
-        log.info(
-            "Parsed → bhk={}, min={}, max={}, location={}, tokens={}",
-            bhk, budget[0], budget[1], location, tokens
-        );
+        List<String> locationCandidates = extractLocationTokens(tokens);
 
         return new ParsedRequest(
             bhk,
-            budget[0],
-            budget[1],
-            location,
+            budget[0] != null ? budget[0].longValue() : null,
+            budget[1] != null ? budget[1].longValue() : null,
+            locationCandidates,
             normalized,
             tokens,
-            hasSearchIntent
+            message
         );
-    }
-
-    
-    private static List<String> extractLocationCandidates(List<String> tokens) {
-
-        return tokens.stream()
-            .map(String::toLowerCase)
-            .filter(t -> t.length() >= 2)
-            .filter(t -> extractBhk(t) == null)
-            .filter(t -> !t.matches("\\d+k|\\d{4,6}"))   // ✅ FIX
-            .filter(t -> !Set.of(
-                "rent", "under", "below", "near",
-                "flat", "house", "budget",
-                "price", "looking"
-            ).contains(t))
-            .toList();
-    }
-
-
-
-    private static String normalize(String text) {
-        return text.toLowerCase()
-                .replaceAll("[^a-z0-9 ]", " ")
-                .replaceAll("\\s+", " ")
-                .trim();
     }
 
     private static String extractBhk(String text) {
@@ -92,24 +43,34 @@ public class SimpleParser {
         return m.find() ? m.group(1) + "BHK" : null;
     }
 
-    private static Integer[] extractBudget(String text) {
-        Matcher m = BUDGET_PATTERN.matcher(text);
+    private static Double[] extractBudget(String text) {
+        Double min = null;
+        Double max = null;
 
-        Integer min = null;
-        Integer max = null;
-
-        if (!m.find()) return new Integer[]{null, null};
-
-        String intent = m.group(1);
-        int value = Integer.parseInt(m.group(2));
-        if (m.group(3) != null) value *= 1000;
-
-        if (intent == null || intent.contains("under") || intent.contains("below")) {
-            max = value;
-        } else {
-            min = value;
+        Matcher crMatcher = CRORE_PATTERN.matcher(text);
+        if (crMatcher.find()) {
+            max = Double.parseDouble(crMatcher.group(1)) * 10_000_000;
         }
 
-        return new Integer[]{min, max};
+        Matcher lakhMatcher = LAKH_PATTERN.matcher(text);
+        if (max == null && lakhMatcher.find()) {
+            max = Double.parseDouble(lakhMatcher.group(1)) * 100_000;
+        }
+
+        Matcher kMatcher = THOUSAND_PATTERN.matcher(text);
+        if (max == null && kMatcher.find()) {
+            max = Double.parseDouble(kMatcher.group(1)) * 1_000;
+        }
+
+        return new Double[]{min, max};
+    }
+
+    private static List<String> extractLocationTokens(List<String> tokens) {
+        Set<String> ignore = Set.of("bhk", "under", "below", "near", "flat", "house", "budget", "in", "for", "cr", "lakh");
+        return tokens.stream()
+                .filter(t -> t.length() >= 3)
+                .filter(t -> !t.matches("\\d+.*"))
+                .filter(t -> !ignore.contains(t))
+                .toList();
     }
 }

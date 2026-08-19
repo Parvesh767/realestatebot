@@ -1,9 +1,9 @@
 package com.risingbee.realestate.automation.actor.enums;
 
 public enum ActorType {
-    USER,     // end user / searcher
-    OWNER,    // property owner
+    OWNER,   // property owner
     BROKER,   // professional broker
-    ADMIN     // future
+    ADMIN,
+    Annonymus// future
 }
 

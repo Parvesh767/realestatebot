@@ -6,6 +6,9 @@ import java.util.Optional;
 
 import org.springframework.stereotype.Service;
 
+import com.risingbee.realestate.auth.AuthorizationService;
+import com.risingbee.realestate.automation.actor.enums.Capability;
+import com.risingbee.realestate.automation.actor.*;
 import com.risingbee.realestate.automation.domain.BrokerArea;
 import com.risingbee.realestate.automation.parser.LocationResolver;
 import com.risingbee.realestate.automation.parser.ResolvedLocation;
@@ -19,10 +22,18 @@ public class BrokerAreaService {
 
     private final BrokerAreaRepository repo;
     private final LocationResolver locationResolver;
+    private final AuthorizationService authz;
 
-   
-    
-    public boolean save(Long brokerId, List<String> rawAreas) {
+    public boolean save(Actor actor, List<String> rawAreas) {
+
+        authz.require(actor, Capability.BROKER_ONBOARDING);
+
+        Long brokerId = actor.internalId();
+        if (brokerId == null) {
+            throw new IllegalStateException(
+                "Actor has no broker identity"
+            );
+        }
 
         repo.deleteAll(repo.findByBrokerId(brokerId));
 
@@ -30,7 +41,6 @@ public class BrokerAreaService {
 
         for (String raw : rawAreas) {
 
-            // tokenize the raw phrase
             List<String> tokens =
                 Arrays.stream(raw.split("\\s+"))
                       .map(String::toLowerCase)
@@ -50,7 +60,7 @@ public class BrokerAreaService {
         return savedAtLeastOne;
     }
 
-
+    /* ---------- READ-ONLY METHODS ---------- */
 
     public List<String> getAreas(Long brokerId) {
         return repo.findByBrokerId(brokerId)
@@ -58,25 +68,22 @@ public class BrokerAreaService {
                    .map(BrokerArea::getLocalityCode)
                    .toList();
     }
-    
-    
-    public boolean accepts(
-    	    Long brokerId,
-    	    String cityCode,
-    	    String localityCode
-    	) {
-    	    if (localityCode != null &&
-    	        repo.existsByBrokerIdAndCityCodeAndLocalityCode(
-    	            brokerId, cityCode, localityCode
-    	        )) {
-    	        return true;
-    	    }
 
-    	    // city-wide broker
-    	    return repo.existsByBrokerIdAndCityCodeAndLocalityCodeIsNull(
-    	        brokerId, cityCode
-    	    );
-    	}
-    
-    
+    public boolean accepts(
+        Long brokerId,
+        String cityCode,
+        String localityCode
+    ) {
+        if (localityCode != null &&
+            repo.existsByBrokerIdAndCityCodeAndLocalityCode(
+                brokerId, cityCode, localityCode
+            )) {
+            return true;
+        }
+
+        return repo.existsByBrokerIdAndCityCodeAndLocalityCodeIsNull(
+            brokerId, cityCode
+        );
+    }
 }
+

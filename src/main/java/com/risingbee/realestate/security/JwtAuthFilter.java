@@ -11,18 +11,17 @@ import org.springframework.security.web.authentication.WebAuthenticationDetailsS
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
-import com.risingbee.realestate.automation.actor.ActorContext;
 import com.risingbee.realestate.automation.actor.Actor;
-import com.risingbee.realestate.automation.actor.enums.*;
+import com.risingbee.realestate.automation.actor.ActorContext;
 
-import io.jsonwebtoken.Claims;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 
-
+@Slf4j
 @Component
 @RequiredArgsConstructor
 public class JwtAuthFilter extends OncePerRequestFilter {
@@ -45,24 +44,18 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
         try {
             String token = authHeader.substring(7);
-            Claims claims = jwtUtil.parseToken(token);
+            Actor actor = jwtUtil.parseToken(token);
 
-            Long accountId = Long.valueOf(claims.getSubject());
+            // FIXED: Standardized fallback authority matching the Session Filter onboarding configuration
+            String authorityName = (actor.role() != null) 
+                    ? "ROLE_" + actor.role().name() 
+                    : "ROLE_ONBOARDING";
 
-            // 🔑 Build Actor (account-centric)
-            Actor actor = new Actor(
-                ActorType.BROKER,          // TEMP: expand later
-                accountId.toString(),      // externalId not critical here
-                accountId
-            );
-
-            // ✅ Spring Security authorities (still valid)
-            List<GrantedAuthority> authorities =
-                List.of(new SimpleGrantedAuthority("ROLE_" + actor.type().name()));
+            List<GrantedAuthority> authorities = List.of(new SimpleGrantedAuthority(authorityName));
 
             UsernamePasswordAuthenticationToken authentication =
                 new UsernamePasswordAuthenticationToken(
-                    accountId,
+                    actor,
                     null,
                     authorities
                 );
@@ -73,13 +66,25 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
             SecurityContextHolder.getContext().setAuthentication(authentication);
 
-            // ✅ Set ActorContext (NOT BrokerContext)
+            // Bind to custom operational thread context
             ActorContext.set(actor);
+            log.debug("JWT Actor bound successfully with authority {}: {}", authorityName, actor);
 
+        } catch (Exception e) {
+            log.warn("JWT parsing failed: {}", e.getMessage());
+            // Clear context immediately if token decoding crashed to avoid cross-contamination
+            SecurityContextHolder.clearContext();
+            ActorContext.clear();
+        }
+
+        try {
+            // CRITICAL CHANGE: The rest of the filter chain MUST execute here 
+            // while the context variables are still present on the current thread execution path.
             filterChain.doFilter(request, response);
-
         } finally {
-            ActorContext.clear(); // always safe
+            // CRITICAL: Wipe thread states out clean after request fully processed
+            SecurityContextHolder.clearContext();
+            ActorContext.clear();
         }
     }
 }

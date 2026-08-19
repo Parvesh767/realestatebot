@@ -1,19 +1,21 @@
 package com.risingbee.realestate.auth;
 
-
 import java.security.SecureRandom;
 import java.time.Instant;
+import java.time.LocalDateTime;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import com.risingbee.realestate.auth.dto.AuthResponse;
+import com.risingbee.realestate.auth.dto.VerifyOtpRequest;
 import com.risingbee.realestate.automation.actor.Actor;
-import com.risingbee.realestate.automation.actor.ActorContext;
-import com.risingbee.realestate.automation.actor.enums.ActorType;
-import com.risingbee.realestate.automation.domain.Broker;
+import com.risingbee.realestate.automation.actor.domain.Account;
+import com.risingbee.realestate.automation.actor.repo.AccountRepository;
 import com.risingbee.realestate.automation.domain.OtpVerification;
-import com.risingbee.realestate.automation.repo.BrokerRepository;
 import com.risingbee.realestate.automation.repo.OtpVerificationRepository;
-import com.risingbee.realestate.automation.service.BrokerService;
+import com.risingbee.realestate.profile.dto.ProfileStage;
+import com.risingbee.realestate.profile.utility.ProfileStageResolver;
 import com.risingbee.realestate.security.JwtUtil;
 
 import jakarta.transaction.Transactional;
@@ -26,130 +28,123 @@ import lombok.extern.slf4j.Slf4j;
 @Transactional
 public class AuthService {
 
-    private final BrokerRepository brokerRepository;
-    private final OtpVerificationRepository otpRepository;
-    private final JwtUtil jwtService;
-    private final BrokerService brokerService;
+	private final OtpVerificationRepository otpRepository;
+	private final AccountRepository accountRepository;
+	
+	private final JwtUtil jwtUtil;
 
-    public void requestOtp(String phone) {
+	@Value("${app.otp.override-enabled}")
+	private boolean otpOverrideEnabled;
 
-        validatePhone(phone);
+	@Value("${app.otp.override-value}")
+	private String otpOverrideValue;
+	
+	public AuthResponse verifyOtpAndHandleUser(VerifyOtpRequest request) {
 
-        
-        
-     // 🔍 Prefer ActorContext for identity (gentle read)
-        Actor actor = ActorContext.get();
+	    validatePhone(request.phone());
 
-        Broker broker = null;
+	    // 1. Validate OTP
+	    OtpVerification record = otpRepository
+	        .findValidOtp(request.phone(), request.otp(), Instant.now())
+	        .orElse(null);
 
-        if (actor != null && actor.type() == ActorType.BROKER) {
-            broker = brokerRepository.findById(actor.internalId())
-                    .orElse(null);
+	    if (!(otpOverrideEnabled && request.otp().equals(otpOverrideValue))) {
 
-            if (broker == null) {
-                log.warn(
-                    "ActorContext says BROKER {} but broker not found in DB",
-                    actor
-                );
-            }
-        }
+	        if (record == null) {
+	            throw new IllegalArgumentException("Invalid or expired OTP");
+	        }
 
-        // 🔁 Fallback to old behavior (unchanged semantics)
-        if (broker == null) {
-            broker = brokerRepository.findByPhone(phone)
-                    .orElseGet(() -> brokerService.createForOnboarding(phone));
-        }
+	        if (!record.canBeUsed()) {
+	            throw new IllegalStateException("OTP already used");
+	        }
+	    }
 
-        
-        
-//        // 1️⃣ Ensure broker exists
-//        Broker broker = brokerRepository.findByPhone(phone)
-//            .orElseGet(() -> brokerRepository.save(new Broker(phone)));
+	    // 2. Find or create account
+	    Account account = accountRepository
+	        .findByExternalId(request.phone())
+	        .orElseGet(() -> {
+	            Account acc = new Account();
+	            acc.setExternalId(request.phone());
+	            acc.setVerified(true);
+	            acc.setActive(true);
+	            acc.setCreatedAt(LocalDateTime.now());
 
-        // 2️⃣ Invalidate old OTPs (DB-level)
-        otpRepository.invalidateActiveOtps(phone);
+	            // DO NOT set role here (staging flow)
+	            return accountRepository.save(acc);
+	        });
 
-        // 3️⃣ Generate OTP
-        String otp = generateOtp();
+	    // 3. Mark OTP used
+	    if (record != null) {
+	        record.markUsed();
+	        otpRepository.save(record);
+	    }
 
-        OtpVerification record = new OtpVerification(
-            phone,
-            otp,
-            Instant.now().plusSeconds(300)
-        );
+	    // 4. Resolve profile stage
+	    ProfileStage stage = ProfileStageResolver.resolve(account);
 
-        otpRepository.save(record);
+	    // 5. Generate token
+	    Actor actor = new Actor(
+	        account.getType(),
+	        account.getExternalId(),
+	        account.getId()
+	    );
 
-        // 4️⃣ Send OTP (TEMP: LOG)
-        log.warn("LOGIN OTP for {} is {}", phone, otp);
-    }
+	    String token = jwtUtil.generateToken(actor);
 
-    public String verifyOtp(String phone, String otp) {
+	    // 6. Return enriched response
+	    return new AuthResponse(
+	        token,
+	        account.getId(),
+	        account.getExternalId(),
+	        account.getType(),
+	        stage.name(),
+	        ProfileStageResolver.nextStep(stage)
+	    );
+	}
+	
+	
+	
+	
+	public void requestOtp(String phone) {
 
-        validatePhone(phone);
+		validatePhone(phone);
 
-        OtpVerification record = otpRepository
-            .findValidOtp(phone, otp, Instant.now())
-            .orElseThrow(() ->
-                new IllegalArgumentException("Invalid or expired OTP")
-            );
+//		// Ensure account exists (identity only)
+//		accountRepository.findByExternalId(phone).orElseThrow(() -> new IllegalStateException("Account not found"));
 
-        // 1️⃣ Domain-enforced usage
-        if (!record.canBeUsed()) {
-            throw new IllegalStateException("OTP already used or expired");
-        }
+		
+		 // Optional: check existence for logging/analytics
+	    boolean exists = accountRepository.findByExternalId(phone).isPresent();
+	    log.debug("account present  : ", exists);
 
-        record.markUsed();
-        otpRepository.save(record);
-        
-        
-     // 🔍 Prefer ActorContext for identity (gentle read)
-        Actor actor = ActorContext.get();
+		otpRepository.invalidateActiveOtps(phone);
 
-        Broker broker = null;
+		String otp = generateOtp();
 
-        if (actor != null && actor.type() == ActorType.BROKER) {
-            broker = brokerRepository.findById(actor.internalId())
-                    .orElse(null);
+		otpRepository.save(new OtpVerification(phone, otp, Instant.now().plusSeconds(300)));
 
-            if (broker == null) {
-                log.warn(
-                    "ActorContext says BROKER {} but broker not found in DB",
-                    actor
-                );
-            }
-        }
-
-        // 🔁 Fallback to old behavior (unchanged semantics)
-        if (broker == null) {
-            broker = brokerRepository.findByPhone(phone)
-                    .orElseThrow(() -> new IllegalStateException("Broker not found"));
-        }
+		log.warn("LOGIN OTP for {} is {}", phone, otp);
+	}
+	
+	
+	
+	
+	private void validatePhone(String phone) {
+		if (phone == null || !phone.matches("^91[0-9]{10}$")) {
+			throw new IllegalArgumentException("Invalid phone number");
+		}
+	}
+	
+	
 
 
-        // 2️⃣ Fetch broker
-//        Broker broker = brokerRepository
-//            .findByPhone(phone)
-//            .orElseThrow(() ->
-//               
-//            );
-
-        // 3️⃣ Issue JWT
-        return jwtService.generateToken(
-            broker.getId(),
-            broker.getPhone()
-        );
-    }
-
-    private void validatePhone(String phone) {
-        if (phone == null || !phone.matches("^91[0-9]{10}$")) {
-            throw new IllegalArgumentException("Invalid phone number");
-        }
-    }
-
-    private String generateOtp() {
-        return String.valueOf(
-            100000 + new SecureRandom().nextInt(900000)
-        );
-    }
+	private String generateOtp() {
+		
+		
+		   if (otpOverrideEnabled) {
+		        return otpOverrideValue;
+		    }
+		
+		return String.valueOf(100000 + new SecureRandom().nextInt(900000));
+	}
 }

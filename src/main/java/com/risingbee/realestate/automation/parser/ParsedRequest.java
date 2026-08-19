@@ -1,40 +1,49 @@
 package com.risingbee.realestate.automation.parser;
 
 import java.util.List;
+
 public record ParsedRequest(
-	    String bhk,
-	    Integer minBudget,
-	    Integer maxBudget,
 
-	    /** Raw, fuzzy location-like text (e.g. "sector 56", "golf") */
-	    List<String> location,
+    String bhk,
 
-	    String normalizedText,
-	    List<String> tokens,
+    Long minBudget,  // Updated from Integer to Long to handle Cr/Lakh amounts
 
-	    boolean hasSearchIntent
-	) {
+    Long maxBudget,  // Updated from Integer to Long to handle Cr/Lakh amounts
 
-	    public boolean hasBudget() {
-	        return minBudget != null || maxBudget != null;
-	    }
+    List<String> location,
 
-	    public boolean hasBhk() {
-	        return bhk != null;
-	    }
+    String normalizedText,
 
-	    public boolean hasLocation() {
-	        return !location.isEmpty();
-	    }
+    List<String> tokens,
 
-	    public boolean hasListingSignals() {
-	        return hasBhk() || hasBudget() || hasLocation();
-	    }
-	    
-	    public  boolean hasSearchIntent() {
-	        return  bhk != null &&
-	                (minBudget != null || maxBudget != null) &&
-	                !location.isEmpty() ;
-	    }
-	}
+    String msg
 
+) {
+
+    public boolean hasBudget() {
+        return minBudget != null || maxBudget != null;
+    }
+
+    public boolean hasBhk() {
+        return bhk != null;
+    }
+
+    public boolean hasLocation() {
+        return location != null && !location.isEmpty();
+    }
+
+    public boolean hasListingSignals() {
+        return hasBhk()
+            || hasBudget()
+            || hasLocation();
+    }
+
+    public boolean hasSearchIntent() {
+        int signals = 0;
+        if (hasBhk()) signals++;
+        if (hasBudget()) signals++;
+        if (hasLocation()) signals++;
+
+        return signals >= 2;
+    }
+}

@@ -1,48 +1,48 @@
 package com.risingbee.realestate.automation.match;
 
-
 import java.util.List;
-
 import com.risingbee.realestate.automation.domain.Property;
 import com.risingbee.realestate.automation.parser.ParsedRequest;
-
+import com.risingbee.realestate.automation.parser.ResolvedLocation;
 
 public class MatchingEngine {
 
-    public static int score(Property p, ParsedRequest req) {
+    public static int score(Property p, ParsedRequest req, ResolvedLocation location) {
         int score = 0;
 
-        // BHK match
-        if (req.bhk() != null && p.getBhk() != null) {
-            if (p.getBhk().equalsIgnoreCase(req.bhk())) {
-                score += 40;
-            } else if (p.getBhk().startsWith(req.bhk().substring(0, 1))) {
-                score += 20;
+        // 1. Location Match (Highest Priority: 50 points)
+        if (location != null && p.getLocalityCode() != null) {
+            if (p.getLocalityCode().equalsIgnoreCase(location.locality())) {
+                score += 50;
+            } else if (p.getCityCode() != null && p.getCityCode().equalsIgnoreCase(location.city())) {
+                score += 25; // Fallback city match
             }
         }
 
-        // Budget match
-        if (req.minBudget() != null && req.maxBudget() != null) {
-            if (p.getPrice() >= req.minBudget() && p.getPrice() <= req.maxBudget()) {
+        // 2. BHK Match (30 points)
+        if (req.bhk() != null && p.getBhk() != null) {
+            if (p.getBhk().equalsIgnoreCase(req.bhk())) {
                 score += 30;
-            } else if (Math.abs(p.getPrice() - req.maxBudget()) <= 5000) {
+            }
+        }
+
+        // 3. Price/Budget Match (20 points)
+        if (req.maxBudget() != null && p.getPrice() != null) {
+            if (p.getPrice() <= req.maxBudget()) {
+                score += 20;
+            } else if (p.getPrice() <= req.maxBudget() * 1.1) { 
+                // Allow a 10% margin above budget
                 score += 10;
             }
         }
 
-        // Location match
-//        if (req.location() != null && p.getArea() != null) {
-//            if (p.getArea().toLowerCase().contains(req.location().toLowerCase())) {
-//                score += 30;
-//            }
-//        }
-
         return score;
     }
 
-    public static List<Property> topMatches(List<Property> props, ParsedRequest req, int limit) {
+    public static List<Property> topMatches(List<Property> props, ParsedRequest req, ResolvedLocation location, int limit) {
         return props.stream()
-                .sorted((a, b) -> score(b, req) - score(a, req))
+                .filter(p -> score(p, req, location) > 30) // Filter out weak matches
+                .sorted((a, b) -> Integer.compare(score(b, req, location), score(a, req, location)))
                 .limit(limit)
                 .toList();
     }

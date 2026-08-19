@@ -16,36 +16,6 @@ public class ConversationService {
 
     private final BrokerConversationRepository repo;
 
-    /**
-     * Start a flow on an existing conversation.
-     * Creation is handled by ConversationLifecycleManager.
-     */
-    public void startFlow(
-        BrokerConversation conversation,
-        ConversationFlow flow
-    ) {
-        if (conversation.getFlow() != null) {
-            return; // already in a flow
-        }
-
-        conversation.setFlow(flow);
-        repo.save(conversation);
-    }
-
-    /**
-     * Reset conversation back to flow selection.
-     */
-    public void reset(BrokerConversation conversation) {
-        conversation.setFlow(null);
-        conversation.setStep(null);
-        conversation.clearProcessedMessages();
-        repo.save(conversation);
-    }
-
-    public void save(BrokerConversation conversation) {
-        repo.save(conversation);
-    }
-    
     public BrokerConversation getOrCreate(Long accountId) {
         if (accountId == null) {
             throw new IllegalArgumentException(
@@ -59,4 +29,11 @@ public class ConversationService {
             );
     }
 
+    public void save(BrokerConversation conversation) {
+        repo.save(conversation);
+    }
+
+    public void delete(BrokerConversation conversation) {
+        repo.delete(conversation);
+    }
 }
