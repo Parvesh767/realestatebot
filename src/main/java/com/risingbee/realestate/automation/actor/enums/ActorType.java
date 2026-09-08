@@ -4,6 +4,8 @@ public enum ActorType {
     OWNER,   // property owner
     BROKER,   // professional broker
     ADMIN,
-    Annonymus// future
+    Annonymus,
+    TENANT ,// future
+    USER
 }
 

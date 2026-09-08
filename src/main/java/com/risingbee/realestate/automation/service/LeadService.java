@@ -17,6 +17,8 @@ import com.risingbee.realestate.automation.parser.ParsedRequest;
 import com.risingbee.realestate.automation.repo.LeadRepository;
 import com.risingbee.realestate.leads.domain.InquirySession;
 import com.risingbee.realestate.leads.enums.ActivityType;
+import com.risingbee.realestate.leads.enums.LeadSource;
+import com.risingbee.realestate.leads.enums.LeadStatus;
 import com.risingbee.realestate.leads.service.LeadActivityService;
 
 import lombok.RequiredArgsConstructor;
@@ -32,13 +34,8 @@ public class LeadService {
     private final AuthorizationService authz;
     private final LeadActivityService leadActivityService;
 
-    // Cooldown window to prevent duplicate lead alerts to the same broker
     private static final int DEDUPLICATION_WINDOW_MINUTES = 10;
 
-    /**
-     * Creates a lead if one does not already exist within the deduplication window.
-     * Returns Optional.empty() if duplicate, signaling to skip WhatsApp alert.
-     */
     public Optional<Lead> createFromMatchedProperty(
         String phone,
         Property property,
@@ -51,7 +48,6 @@ public class LeadService {
             return Optional.empty();
         }
 
-        // 1. Check if an identical lead already exists within the last 10 minutes
         Instant cooldownWindow = Instant.now().minus(DEDUPLICATION_WINDOW_MINUTES, ChronoUnit.MINUTES);
         Optional<Lead> existingLead = leadRepository
                 .findTopByOwnerAccountIdAndPhoneNumberAndCreatedAtAfterOrderByCreatedAtDesc(
@@ -60,10 +56,9 @@ public class LeadService {
         if (existingLead.isPresent()) {
             log.info("Duplicate search inquiry detected for ownerAccountId={} from phone={}. Skipping WhatsApp alert.",
                     ownerAccountId, phone);
-            return Optional.empty(); // 🛑 Returns empty so caller does NOT send duplicate WhatsApp messages
+            return Optional.empty();
         }
 
-        // 2. Persist new Lead
         Lead lead = new Lead(
             phone,
             ownerAccountId,
@@ -75,6 +70,7 @@ public class LeadService {
             rawMessage
         );
         
+        lead.setSource(LeadSource.WHATSAPP_AUTOMATION);
         Lead savedLead = leadRepository.save(lead);
 
         leadActivityService.log(
@@ -121,7 +117,17 @@ public class LeadService {
             inquiry.getRawMessage()
         );
 
+        lead.setSource(LeadSource.WHATSAPP_AUTOMATION);
         Lead saved = leadRepository.save(lead);
+
+        // Added missing activity log for qualified WhatsApp leads
+        leadActivityService.log(
+            saved.getId(),
+            inquiry.getOwnerAccountId(),
+            ActivityType.AUTO_CREATED,
+            "Lead created from qualified WhatsApp session"
+        );
+
         return Optional.of(saved);
     }
 
@@ -148,5 +154,24 @@ public class LeadService {
     @Transactional(readOnly = true)
     public Optional<Lead> findLatestByPhone(String phone) {
         return leadRepository.findTopByPhoneNumberOrderByCreatedAtDesc(phone);
+    }
+
+    public Lead updateLeadStatus(Long leadId, LeadStatus status) {
+        Lead lead = leadRepository.findById(leadId)
+                .orElseThrow(() -> new IllegalArgumentException("Lead not found with id: " + leadId));
+        
+        lead.setStatus(status);
+        lead.setUpdatedAt(Instant.now());
+        Lead saved = leadRepository.save(lead);
+
+        // Record status change event to timeline history
+        leadActivityService.log(
+            leadId,
+            lead.getOwnerAccountId(),
+            ActivityType.AUTO_CREATED, // Or custom activity type if available
+            "Lead status updated to " + status
+        );
+
+        return saved;
     }
 }

@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8">
+</head>
+<body>
+
+  <!-- Reusable Unified Navigation Bar Fragment -->
+  <header th:fragment="navbar" class="border-b border-slate-800 bg-slate-900/80 sticky top-0 z-50 backdrop-blur-md">
+    <div class="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
+
+      <!-- Brand Identity & Navigation Tabs -->
+      <div class="flex items-center gap-6">
+		
+		
+        <a href="/dashboard" class="flex items-center gap-3">
+          <div class="h-9 w-9 rounded-xl bg-indigo-600 flex items-center justify-center text-white shadow-lg shadow-indigo-600/30">
+            <i data-lucide="building-2" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <h1 id="nav-user-name" class="text-sm font-bold text-white leading-none">Property Hub</h1>
+            <p id="nav-user-role" class="text-[11px] text-slate-400 mt-1">Console</p>
+          </div>
+        </a>
+
+        <nav class="hidden md:flex items-center gap-1 bg-slate-800/60 p-1 rounded-xl border border-slate-700/60 text-xs">
+		
+			<a th:href="@{/admin/profile}" class="text-xs text-slate-300 hover:text-white transition">Profile Settings</a>
+		
+          <a href="/dashboard" data-nav="/dashboard"
+             class="nav-link px-3 py-1.5 rounded-lg text-slate-400 hover:text-white font-medium transition flex items-center gap-1.5">
+            <i data-lucide="inbox" class="w-3.5 h-3.5"></i> Leads
+          </a>
+          <a href="/admin/properties" data-nav="/admin/properties"
+             class="nav-link px-3 py-1.5 rounded-lg text-slate-400 hover:text-white font-medium transition flex items-center gap-1.5">
+            <i data-lucide="home" class="w-3.5 h-3.5"></i> Properties
+          </a>
+          <a href="/services/hub" data-nav="/services"
+             class="nav-link px-3 py-1.5 rounded-lg text-slate-400 hover:text-white font-medium transition flex items-center gap-1.5">
+            <i data-lucide="wrench" class="w-3.5 h-3.5"></i> Services
+          </a>
+          <a href="/tenancy" data-nav="/tenancy"
+             class="nav-link px-3 py-1.5 rounded-lg text-slate-400 hover:text-white font-medium transition flex items-center gap-1.5">
+            <i data-lucide="shield-check" class="w-3.5 h-3.5"></i> Tenancies & Rents
+          </a>
+        </nav>
+      </div>
+
+      <!-- Live Credit Balance & User Profile Actions -->
+      <div class="flex items-center gap-3">
+        <div class="flex items-center gap-2 bg-slate-800/80 px-3.5 py-1.5 rounded-xl border border-slate-700/80">
+          <i data-lucide="zap" class="w-4 h-4 text-amber-400 fill-amber-400"></i>
+          <span class="text-xs text-slate-400">Credits:</span>
+          <span id="nav-credit-badge" class="text-xs font-bold text-emerald-400 font-mono">...</span>
+        </div>
+
+        <button onclick="openRechargeModal()"
+                class="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold bg-emerald-500 hover:bg-emerald-400 text-slate-950 rounded-xl transition shadow-md shadow-emerald-500/20">
+          <i data-lucide="plus" class="w-3.5 h-3.5"></i> Top Up
+        </button>
+
+        <a href="/web/auth/logout"
+           class="p-2 rounded-xl bg-slate-800 hover:bg-red-500/20 hover:text-red-400 text-slate-400 transition"
+           title="Logout">
+          <i data-lucide="log-out" class="w-4 h-4"></i>
+        </a>
+      </div>
+
+    </div>
+  </header>
+
+  <!-- Reusable Script Fragment -->
+  <div th:fragment="navScripts">
+    <script>
+      async function syncNavState() {
+        const currentPath = window.location.pathname.toLowerCase();
+        const activeClasses = ['text-white', 'bg-slate-700/80', 'font-bold', 'border', 'border-slate-600/50', 'shadow-sm'];
+        const inactiveClasses = ['text-slate-400', 'font-medium'];
+
+        document.querySelectorAll('.nav-link').forEach(link => {
+          const target = (link.getAttribute('data-nav') || '').toLowerCase();
+          let isMatch = false;
+
+          if (target === '/dashboard') {
+            isMatch = (currentPath === '/' || currentPath === '/dashboard' || currentPath.includes('dashboard'));
+          } else if (target !== '') {
+            isMatch = currentPath.startsWith(target);
+          }
+
+          if (isMatch) {
+            link.classList.remove(...inactiveClasses);
+            link.classList.add(...activeClasses);
+          } else {
+            link.classList.remove(...activeClasses);
+            link.classList.add(...inactiveClasses);
+          }
+        });
+
+        try {
+          const res = await fetch('/api/accounts/me', { credentials: 'same-origin' });
+          if (res.ok) {
+            const acc = await res.json();
+            const creditBadge = document.getElementById('nav-credit-badge');
+            const userName = document.getElementById('nav-user-name');
+            const userRole = document.getElementById('nav-user-role');
+
+            if (creditBadge) creditBadge.innerText = (acc.creditsBalance !== undefined) ? acc.creditsBalance : '0';
+            if (userName && acc.name) userName.innerText = acc.name;
+            if (userRole) userRole.innerText = acc.phone ? `+${acc.phone}` : (acc.role || 'Console');
+          }
+        } catch (e) {
+          console.warn('Navbar sync skipped:', e);
+        }
+      }
+
+      function openRechargeModal() {
+        const modal = document.getElementById('recharge-modal');
+        if (modal) {
+          modal.classList.remove('hidden');
+          modal.classList.add('flex');
+        } else {
+          window.location.href = '/dashboard#recharge';
+        }
+      }
+
+      function closeRechargeModal() {
+        const modal = document.getElementById('recharge-modal');
+        if (modal) {
+          modal.classList.add('hidden');
+          modal.classList.remove('flex');
+        }
+      }
+    </script>
+  </div>
+
+</body>
+</html>

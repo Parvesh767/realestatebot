@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Broker Profile & Settings — Property Hub</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen antialiased flex flex-col justify-between selection:bg-indigo-500 selection:text-white">
+
+  <!-- Include Navbar Fragment -->
+  <div th:replace="~{fragments/header :: navbar}"></div>
+
+  <main class="max-w-3xl mx-auto my-8 px-6 w-full space-y-6">
+    <div class="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6">
+      
+      <div class="pb-4 border-b border-slate-800">
+        <h1 class="text-xl font-bold text-white">Broker Profile & Payment Settings</h1>
+        <p class="text-xs text-slate-400 mt-1">Manage your professional collection details and WhatsApp payment routing handles.</p>
+      </div>
+
+      <!-- Account Info Summary -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div class="p-4 rounded-2xl bg-slate-800/50 border border-slate-700/60">
+          <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">Registered Name</span>
+          <span id="account-name" class="text-sm font-bold text-white">Loading...</span>
+        </div>
+        <div class="p-4 rounded-2xl bg-slate-800/50 border border-slate-700/60">
+          <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">WhatsApp Phone / ID</span>
+          <span id="account-phone" class="text-sm font-bold font-mono text-emerald-400">Loading...</span>
+        </div>
+      </div>
+
+      <!-- Payment Gateway & Multi-UPI Management Card -->
+      <div class="bg-slate-800/40 border border-slate-700/80 rounded-2xl p-6 space-y-4">
+        <div>
+          <h3 class="text-sm font-bold text-white flex items-center gap-2">
+            <i data-lucide="shield-check" class="w-4 h-4 text-indigo-400"></i> Payment Gateway & UPI Management
+          </h3>
+          <p class="text-xs text-slate-400 mt-0.5">Manage your collection VPA handles. The default handle will be attached to automated WhatsApp payment reminders.</p>
+        </div>
+
+        <!-- Add New UPI Form -->
+        <div class="flex gap-2 pt-2">
+          <input type="text" id="new-upi-input" placeholder="e.g. mybusiness@ybl or 918847@paytm" 
+                 class="flex-1 px-4 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+          <button onclick="addBrokerUpi()" class="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs rounded-xl shadow-lg shadow-indigo-600/20 transition">
+            Add UPI ID
+          </button>
+        </div>
+
+        <!-- Saved UPI Handles List Container -->
+        <div id="upi-handles-list" class="space-y-2.5 pt-2">
+          <!-- Injected via JavaScript -->
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <footer class="border-t border-slate-800 py-6 text-center text-xs text-slate-500">
+    <p>Property Hub — Broker Profile Management</p>
+  </footer>
+
+  <div th:replace="~{fragments/header :: navScripts}"></div>
+
+  <script>
+    async function loadProfileData() {
+      try {
+        const res = await fetch('/api/accounts/me', { credentials: 'same-origin' });
+        if (res.ok) {
+          const data = await res.json();
+          document.getElementById('account-name').innerText = data.name || 'Broker Partner';
+          document.getElementById('account-phone').innerText = '+' + (data.phone || '');
+        }
+      } catch (e) {
+        console.error('Failed to load profile details');
+      }
+    }
+
+    async function loadUpiHandles() {
+      try {
+        const res = await fetch('/api/broker/upi', { credentials: 'same-origin' });
+        if (res.ok) {
+          const handles = await res.json();
+          const container = document.getElementById('upi-handles-list');
+          
+          if (!handles || handles.length === 0) {
+            container.innerHTML = `<p class="text-xs text-slate-500 italic py-2">No UPI IDs saved yet. Add one above.</p>`;
+            return;
+          }
+
+          container.innerHTML = handles.map(h => `
+            <div class="flex items-center justify-between p-3.5 bg-slate-800/60 border ${h.default ? 'border-indigo-500/50 bg-indigo-950/20' : 'border-slate-700'} rounded-xl text-xs">
+              <div class="flex items-center gap-2.5">
+                <span class="font-mono font-bold text-white text-sm">${h.upiId}</span>
+                ${h.default ? '<span class="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">Default</span>' : ''}
+              </div>
+              <div class="flex items-center gap-2">
+                ${!h.default ? `<button onclick="setDefaultUpi(${h.id})" class="px-2.5 py-1 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-300 transition text-[11px]">Set Default</button>` : ''}
+                <button onclick="deleteUpi(${h.id})" class="p-1.5 rounded-lg bg-slate-700 hover:bg-red-500/20 text-slate-400 hover:text-red-400 transition" title="Delete">
+                  <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                </button>
+              </div>
+            </div>
+          `).join('');
+          lucide.createIcons();
+        }
+      } catch (e) {
+        console.error('Failed to load UPI handles');
+      }
+    }
+
+    async function addBrokerUpi() {
+      const input = document.getElementById('new-upi-input');
+      const upiId = input.value.trim();
+      if (!upiId) return alert('Please enter a valid UPI ID');
+
+      try {
+        const res = await fetch('/api/broker/upi', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ upiId }),
+          credentials: 'same-origin'
+        });
+
+        if (res.ok) {
+          input.value = '';
+          loadUpiHandles();
+        } else {
+          const err = await res.json();
+          alert('Failed to add UPI ID: ' + (err.error || 'Unknown error'));
+        }
+      } catch (err) {
+        alert('Error connecting to server.');
+      }
+    }
+
+    async function setDefaultUpi(id) {
+      try {
+        const res = await fetch(`/api/broker/upi/${id}/default`, { method: 'POST', credentials: 'same-origin' });
+        if (res.ok) {
+          loadUpiHandles();
+        } else {
+          alert('Failed to change default UPI.');
+        }
+      } catch (err) {
+        alert('Error connecting to server.');
+      }
+    }
+
+    async function deleteUpi(id) {
+      if (!confirm('Are you sure you want to delete this UPI ID?')) return;
+      try {
+        const res = await fetch(`/api/broker/upi/${id}`, { method: 'DELETE', credentials: 'same-origin' });
+        if (res.ok) {
+          loadUpiHandles();
+        } else {
+          alert('Failed to delete UPI ID.');
+        }
+      } catch (err) {
+        alert('Error connecting to server.');
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      syncNavState();
+      loadProfileData();
+      loadUpiHandles();
+      lucide.createIcons();
+    });
+  </script>
+</body>
+</html>

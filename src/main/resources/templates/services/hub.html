@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Services &amp; Maintenance Hub — Property Hub</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen antialiased flex flex-col justify-between selection:bg-indigo-500 selection:text-white">
+
+  <!-- Unified Sticky Navbar Fragment -->
+  <div th:replace="~{fragments/header :: navbar}"></div>
+	  
+  <!-- Main Container -->
+  <main class="max-w-7xl mx-auto px-6 py-8 w-full space-y-8">
+    
+    <!-- Hero Banner -->
+    <div class="p-6 bg-gradient-to-r from-slate-900 via-amber-950/30 to-slate-900 border border-slate-800 rounded-3xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+      <div>
+        <h2 class="text-xl font-bold text-white">Book On-Demand Essential Services</h2>
+        <p class="text-xs text-slate-400 mt-1">Book repairs with wallet credits or pay cash upon completion. Verified partners with 4-digit OTP sign-off.</p>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-xs font-semibold">
+          ⚡ 60-Min Dispatch SLA
+        </span>
+      </div>
+    </div>
+
+    <!-- Tenant Raised Maintenance Tickets Section -->
+    <div class="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl space-y-4">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-800">
+        <div class="flex items-center gap-2">
+          <i data-lucide="wrench" class="w-4 h-4 text-amber-400"></i>
+          <h3 class="text-xs font-bold uppercase tracking-wider text-white">Tenant Raised Issue Tickets</h3>
+        </div>
+        <span class="text-xs font-mono text-slate-400" th:text="${#lists.size(tenantTickets)} + ' Total Tickets'">0 Total</span>
+      </div>
+
+      <div th:if="${#lists.isEmpty(tenantTickets)}" class="py-6 text-center text-slate-500 text-xs">
+        No open tenant maintenance tickets found.
+      </div>
+
+      <div th:unless="${#lists.isEmpty(tenantTickets)}" class="space-y-3">
+        <div th:each="td : ${tenantTickets}" 
+             class="p-4 bg-slate-800/60 border border-slate-700/60 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <div class="flex items-center gap-2 mb-1">
+              <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20" 
+                    th:text="${td.category}">CATEGORY</span>
+              <span class="text-xs font-bold text-white" th:text="${td.title}">Issue Title</span>
+            </div>
+            <p class="text-xs text-slate-400" 
+               th:text="${td.description != null && !td.description.isBlank()} ? ${td.description} : 'No description provided.'"></p>
+            <span class="text-[10px] text-slate-500 font-mono mt-1 block" 
+                  th:text="'Unit: ' + ${td.propertyAddress} + ' • Contract #' + ${td.contractId} + ' • ' + ${#temporals.format(td.createdAt, 'dd MMM yyyy, hh:mm a')}">
+            </span>
+          </div>
+
+		  <div class="flex items-center gap-2 shrink-0">
+		    <!-- When resolved -->
+		    <span th:if="${td.status != null and td.status.name() == 'RESOLVED'}" 
+		          class="text-[10px] font-bold px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+		      RESOLVED
+		    </span>
+
+		    <!-- When technician is assigned or in progress -->
+		    <span th:if="${td.status != null and (td.status.name() == 'ASSIGNED' or td.status.name() == 'IN_PROGRESS')}" 
+		          class="text-[10px] font-bold px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">
+		      TECHNICIAN ASSIGNED
+		    </span>
+
+		    <!-- Available for booking -->
+		    <button th:if="${td.status != null and td.status.name() == 'OPEN'}"
+		            type="button"
+		            th:data-contract-id="${td.contractId}"
+		            th:data-address="${td.propertyAddress}"
+		            th:data-locality="${td.localityCode}"
+		            th:data-ticket-id="${td.ticketId}"
+		            th:data-issue="${td.title}"
+		            th:data-category="${td.category}"
+		            onclick="openDispatchModal(this)"
+		            class="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-lg shadow-indigo-600/20">
+		      <i data-lucide="send" class="w-3.5 h-3.5"></i> Assign Technician
+		    </button>
+		  </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Service Catalog Grid -->
+    <div>
+      <h3 class="text-sm font-bold uppercase tracking-wider text-slate-400 mb-4">Available Home &amp; Staging Services</h3>
+      
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div th:each="s : ${catalog}" class="bg-slate-900/80 border border-slate-800 hover:border-slate-700 rounded-2xl p-5 flex flex-col justify-between shadow-md transition hover:-translate-y-0.5">
+          <div class="space-y-2">
+            <div class="flex items-center justify-between">
+              <span class="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20" th:text="${s.category}">ELECTRICIAN</span>
+              <span class="text-xs font-mono font-bold text-emerald-400" th:text="${s.creditCost + ' Credits / ₹' + s.fiatPriceInr}">4 Credits</span>
+            </div>
+            <h4 class="text-sm font-bold text-white" th:text="${s.title}">Switchboard &amp; Wiring Repair</h4>
+            <p class="text-xs text-slate-400 line-clamp-2" th:text="${s.description}">Fast troubleshooting of tripping MCBs, switchboards, and wiring faults.</p>
+          </div>
+
+          <div class="pt-4 mt-4 border-t border-slate-800 flex items-center justify-between">
+            <span class="text-[11px] text-slate-500 flex items-center gap-1">
+              <i data-lucide="clock" class="w-3.5 h-3.5"></i> <span th:text="${s.estimatedDurationMins + ' Mins'}">60 Mins</span>
+            </span>
+            <button type="button"
+                    th:data-id="${s.id}"
+                    th:data-title="${s.title}"
+                    th:data-credits="${s.creditCost}"
+                    th:data-price="${s.fiatPriceInr}"
+                    onclick="openBookingModalFromCatalog(this)"
+                    class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold shadow-md transition">
+              Book Now
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Active Orders / Booking History -->
+    <div class="bg-slate-900/60 border border-slate-800 rounded-3xl p-6 space-y-4">
+      <div class="flex items-center justify-between pb-4 border-b border-slate-800">
+        <div>
+          <h3 class="text-base font-bold text-white">Your Service Bookings</h3>
+          <p class="text-xs text-slate-400">Track technician assignment and completion OTPs</p>
+        </div>
+      </div>
+
+      <div th:if="${#lists.isEmpty(myBookings)}" class="py-8 text-center text-slate-500 text-xs">
+        No past service requests found.
+      </div>
+
+      <div th:unless="${#lists.isEmpty(myBookings)}" class="space-y-3">
+        <div th:each="b : ${myBookings}" class="p-4 bg-slate-800/50 border border-slate-700/60 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div class="space-y-1">
+            <div class="flex items-center gap-2">
+              <span class="text-xs font-bold text-white" th:text="${b.serviceItem.title}">Electrician</span>
+              <span class="text-[10px] font-bold px-2 py-0.5 rounded-full"
+                    th:classappend="${b.status.name() == 'COMPLETED' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'}"
+                    th:text="${b.status}">PENDING</span>
+            </div>
+            <p class="text-xs text-slate-400" th:text="${b.userAddress}">Flat 402, Tower B</p>
+            <span class="text-[11px] text-indigo-400 font-mono" th:text="'Slot: ' + ${b.preferredDate} + ' (' + ${b.preferredTimeSlot} + ')'">2026-08-22</span>
+          </div>
+
+          <div class="flex items-center gap-4">
+            <div class="text-right">
+              <!-- OTP Display: Handled for Tenant vs Broker direct booking -->
+              <div th:if="${b.tenancyContractId != null}">
+                <span class="text-[10px] uppercase font-bold text-slate-400 block">OTP Sent to Tenant</span>
+                <span class="text-xs font-mono font-bold text-slate-300" th:text="'+' + ${b.targetRecipientPhone}">+91...</span>
+              </div>
+              <div th:unless="${b.tenancyContractId != null}">
+                <span class="text-[10px] uppercase font-bold text-slate-500 block">Completion OTP</span>
+                <span class="text-base font-mono font-black text-amber-400 tracking-widest" th:text="${b.completionOtp}">1234</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Unified Dispatch & Booking Modal -->
+  <div id="booking-modal" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm hidden items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-800 w-full max-w-lg rounded-3xl p-6 relative shadow-2xl">
+      <button onclick="closeBookingModal()" class="absolute top-4 right-4 text-slate-400 hover:text-white">
+        <i data-lucide="x" class="w-5 h-5"></i>
+      </button>
+
+      <h3 class="text-base font-bold text-white mb-1" id="modal-service-title">Book Service</h3>
+      <p class="text-xs text-slate-400 mb-3" id="modal-service-pricing">Charges: 4 Credits or ₹299</p>
+
+      <!-- Linked Ticket Context Banner -->
+      <div id="modal-ticket-badge" class="hidden mb-3 p-3 bg-indigo-950/40 border border-indigo-500/30 rounded-2xl flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <i data-lucide="ticket" class="w-4 h-4 text-indigo-400"></i>
+          <span id="modal-ticket-summary" class="text-xs font-bold text-indigo-200">Resolving Ticket</span>
+        </div>
+        <span class="text-[10px] text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">Auto-Linked</span>
+      </div>
+
+      <form id="booking-form" onsubmit="submitServiceBooking(event)" class="space-y-3">
+        <!-- Hidden Inputs for Linkage -->
+        <input type="hidden" id="modal-catalog-id" />
+        <input type="hidden" id="modal-contract-id" />
+        <input type="hidden" id="modal-ticket-id" />
+        <input type="hidden" id="modal-locality" value="GUR" />
+
+        <div>
+          <label class="block text-[10px] font-bold uppercase text-slate-400 mb-1">Service Address *</label>
+          <input type="text" id="modal-address" required placeholder="Flat / Floor, Society, Locality" 
+                 class="w-full px-3.5 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
+        </div>
+
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="block text-[10px] font-bold uppercase text-slate-400 mb-1">Preferred Date *</label>
+            <input type="date" id="modal-date" required 
+                   class="w-full px-3.5 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
+          </div>
+          <div>
+            <label class="block text-[10px] font-bold uppercase text-slate-400 mb-1">Time Slot *</label>
+            <select id="modal-slot" class="w-full px-3.5 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+              <option value="10:00 AM - 12:00 PM">10:00 AM - 12:00 PM</option>
+              <option value="02:00 PM - 04:00 PM">02:00 PM - 04:00 PM</option>
+              <option value="05:00 PM - 07:00 PM">05:00 PM - 07:00 PM</option>
+            </select>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-[10px] font-bold uppercase text-slate-400 mb-1">Issue Description</label>
+          <input type="text" id="modal-desc" placeholder="e.g. Geyser switch sparking" 
+                 class="w-full px-3.5 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
+        </div>
+
+        <div>
+          <label class="block text-[10px] font-bold uppercase text-slate-400 mb-1">Payment Option</label>
+          <div class="grid grid-cols-2 gap-2">
+            <label class="cursor-pointer">
+              <input type="radio" name="payOption" value="CREDIT" checked class="peer sr-only" />
+              <div class="p-2.5 text-center rounded-xl bg-slate-800 border border-slate-700 peer-checked:bg-indigo-600 peer-checked:border-indigo-500 text-xs font-semibold text-white">
+                Deduct Credits
+              </div>
+            </label>
+            <label class="cursor-pointer">
+              <input type="radio" name="payOption" value="PAY_AFTER_SERVICE" class="peer sr-only" />
+              <div class="p-2.5 text-center rounded-xl bg-slate-800 border border-slate-700 peer-checked:bg-indigo-600 peer-checked:border-indigo-500 text-xs font-semibold text-white">
+                Pay on Visit (UPI/Cash)
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <button type="submit" class="w-full py-3 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-xl shadow-lg transition mt-4">
+          Confirm Service Booking
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <footer class="border-t border-slate-800/80 py-6 text-center text-xs text-slate-500">
+    <p>Property Hub — Unified Maintenance &amp; Home Services Hub</p>
+  </footer>
+
+  <!-- Include Common Header Scripts -->
+  <div th:replace="~{fragments/header :: navScripts}"></div>
+
+  <script>
+    function openBookingModalFromCatalog(button) {
+      resetModal();
+      const id = button.getAttribute('data-id');
+      const title = button.getAttribute('data-title');
+      const credits = button.getAttribute('data-credits');
+      const price = button.getAttribute('data-price');
+
+      document.getElementById('modal-catalog-id').value = id;
+      document.getElementById('modal-service-title').innerText = title;
+      document.getElementById('modal-service-pricing').innerText = `Cost: ${credits} Credits or ₹${price} upon service`;
+      document.getElementById('modal-date').value = new Date().toISOString().split('T')[0];
+
+      showModal();
+    }
+
+	function openDispatchModal(button) {
+	  resetModal();
+	  const contractId = button.getAttribute('data-contract-id');
+	  const address = button.getAttribute('data-address');
+	  const locality = button.getAttribute('data-locality');
+	  const ticketId = button.getAttribute('data-ticket-id');
+	  const issue = button.getAttribute('data-issue');
+	  const category = button.getAttribute('data-category');
+
+	  document.getElementById('modal-contract-id').value = contractId || '';
+	  document.getElementById('modal-ticket-id').value = ticketId || '';
+	  document.getElementById('modal-address').value = address || '';
+	  document.getElementById('modal-locality').value = locality || 'GUR';
+	  document.getElementById('modal-desc').value = issue || '';
+	  document.getElementById('modal-date').value = new Date().toISOString().split('T')[0];
+
+	  // Exact mapping matching your seeded catalog IDs
+	  const catalogMap = {
+	    'PLUMBING': '6',        // Tap Leakage & Pipe Joint Fix
+	    'ELECTRICAL': '1',      // Switchboard, Socket & MCB Repair
+	    'CARPENTRY': '2',       // Door Lock, Handle & Hinge Repair
+	    'DEEP_CLEANING': '3',   // Full 2BHK Turnover Deep Clean
+	    'PAINTING': '4',
+	    'OTHER': '1'
+	  };
+
+	  const selectedCatalogId = catalogMap[category] || '1';
+	  document.getElementById('modal-catalog-id').value = selectedCatalogId;
+
+	  document.getElementById('modal-ticket-summary').innerText = `Resolving Ticket #${ticketId}: ${issue}`;
+	  document.getElementById('modal-ticket-badge').classList.remove('hidden');
+
+	  showModal();
+	}
+
+    function showModal() {
+      const modal = document.getElementById('booking-modal');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    }
+
+    function closeBookingModal() {
+      const modal = document.getElementById('booking-modal');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+      resetModal();
+    }
+
+    function resetModal() {
+      document.getElementById('booking-form').reset();
+      document.getElementById('modal-ticket-badge').classList.add('hidden');
+      document.getElementById('modal-contract-id').value = '';
+      document.getElementById('modal-ticket-id').value = '';
+      document.getElementById('modal-catalog-id').value = '';
+    }
+
+    async function submitServiceBooking(e) {
+      e.preventDefault();
+      const payload = {
+        serviceCatalogId: Number(document.getElementById('modal-catalog-id').value),
+        address: document.getElementById('modal-address').value,
+        localityCode: document.getElementById('modal-locality').value || 'GUR',
+        preferredDate: document.getElementById('modal-date').value,
+        preferredTimeSlot: document.getElementById('modal-slot').value,
+        issueDescription: document.getElementById('modal-desc').value,
+        paymentMode: document.querySelector('input[name="payOption"]:checked').value,
+        tenancyContractId: document.getElementById('modal-contract-id').value ? Number(document.getElementById('modal-contract-id').value) : null,
+        maintenanceTicketId: document.getElementById('modal-ticket-id').value ? Number(document.getElementById('modal-ticket-id').value) : null
+      };
+
+      try {
+        const res = await fetch('/api/services/book', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        if (res.ok) {
+          window.location.reload();
+        } else {
+          const err = await res.json();
+          alert(err.message || 'Booking failed. Check credit balance.');
+        }
+      } catch (err) {
+        alert('Network error while placing booking.');
+      }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      if (typeof syncNavState === 'function') syncNavState();
+      if (window.lucide) lucide.createIcons();
+    });
+  </script>
+</body>
+</html>

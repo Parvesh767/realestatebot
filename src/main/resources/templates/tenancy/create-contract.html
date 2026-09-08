@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Create Tenancy Agreement — Property Hub</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen antialiased flex flex-col justify-between selection:bg-indigo-500 selection:text-white">
+
+  <div th:replace="~{fragments/header :: navbar}"></div>
+
+  <main class="max-w-3xl mx-auto my-8 px-6 w-full">
+    <div class="bg-slate-900 border border-slate-800 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6">
+      
+      <div class="flex items-center justify-between pb-4 border-b border-slate-800">
+        <div>
+          <h1 class="text-xl font-bold text-white">Create Tenancy Agreement</h1>
+          <p class="text-xs text-slate-400 mt-1" th:text="'Binding agreement for: ' + ${property.title} + ' (#' + ${property.id} + ')'">Binding agreement</p>
+        </div>
+        <a href="/admin/properties" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold border border-slate-700 transition">
+          <i data-lucide="arrow-left" class="w-3.5 h-3.5"></i> Back
+        </a>
+      </div>
+
+      <form th:action="@{'/admin/properties/' + ${property.id} + '/contract'}" method="POST" class="space-y-4">
+        
+        <!-- Tenant Details -->
+        <div class="space-y-3">
+          <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400">1. Tenant Information</h3>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div class="space-y-1.5">
+              <label class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Tenant Full Name *</label>
+              <input type="text" name="tenantName" placeholder="e.g. Rahul Sharma" required
+                     class="w-full px-4 py-2.5 bg-slate-800/80 border border-slate-700 rounded-xl text-white text-xs focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
+            </div>
+            <div class="space-y-1.5">
+              <label class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Tenant Phone (WhatsApp) *</label>
+              <input type="text" name="tenantPhone" placeholder="e.g. 919876543210" required
+                     class="w-full px-4 py-2.5 bg-slate-800/80 border border-slate-700 rounded-xl text-white text-xs font-mono focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
+            </div>
+          </div>
+        </div>
+
+        <!-- Lease Financials -->
+        <div class="space-y-3 pt-2">
+          <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400">2. Financial Terms</h3>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div class="space-y-1.5">
+              <label class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Monthly Rent (₹) *</label>
+              <input type="number" name="monthlyRent" th:value="${property.price}" required
+                     class="w-full px-4 py-2.5 bg-slate-800/80 border border-slate-700 rounded-xl text-white text-xs font-mono font-bold focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
+            </div>
+            <div class="space-y-1.5">
+              <label class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Security Deposit (₹) *</label>
+              <input type="number" name="securityDeposit" th:value="${property.securityDeposit}" required
+                     class="w-full px-4 py-2.5 bg-slate-800/80 border border-slate-700 rounded-xl text-white text-xs font-mono font-bold focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
+            </div>
+          </div>
+        </div>
+
+        <!-- Lease Period -->
+        <div class="space-y-3 pt-2">
+          <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400">3. Agreement Duration</h3>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div class="space-y-1.5">
+              <label class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Start Date *</label>
+              <input type="date" name="startDate" required
+                     class="w-full px-4 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-white text-xs focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
+            </div>
+            <div class="space-y-1.5">
+              <label class="text-[11px] font-bold uppercase tracking-wider text-slate-400">End Date *</label>
+              <input type="date" name="endDate" required
+                     class="w-full px-4 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-white text-xs focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
+            </div>
+            <div class="space-y-1.5">
+              <label class="text-[11px] font-bold uppercase tracking-wider text-slate-400">Notice Period (Days)</label>
+              <input type="number" name="noticePeriodDays" value="30"
+                     class="w-full px-4 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-white text-xs focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
+            </div>
+          </div>
+        </div>
+
+        <div class="pt-4 border-t border-slate-800 flex items-center justify-end gap-3">
+          <a href="/admin/properties" class="px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold border border-slate-700 transition">
+            Cancel
+          </a>
+          <button type="submit" class="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl shadow-lg shadow-indigo-600/20 transition flex items-center gap-2">
+            <i data-lucide="file-signature" class="w-4 h-4"></i> Activate Contract & Send WhatsApp Notice
+          </button>
+        </div>
+      </form>
+    </div>
+  </main>
+
+  <footer class="border-t border-slate-800/80 py-6 text-center text-xs text-slate-500">
+    <p>Property Hub — Digital Tenancy Management</p>
+  </footer>
+
+  <div th:replace="~{fragments/header :: navScripts}"></div>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      syncNavState();
+      lucide.createIcons();
+    });
+  </script>
+</body>
+</html>

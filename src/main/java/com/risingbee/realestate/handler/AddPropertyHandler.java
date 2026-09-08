@@ -200,7 +200,7 @@ public class AddPropertyHandler {
         switch (message.trim().toUpperCase()) {
 
             case "CONFIRM" -> {
-                propertyService.createFromConversation(actor,conv);
+//                propertyService.createFromConversation(actor,conv);
                 conversationRepo.delete(conv);
                 send(actor.externalId(), "🎉 *Property published successfully!*");
             }

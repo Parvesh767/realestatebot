@@ -130,48 +130,4 @@ public class PaymentWebhookController {
         """);
     }
     
-//    @PostMapping("/webhook")
-//    public ResponseEntity<String> handlePaymentWebhook(@RequestBody String payload) {
-//        log.info("Incoming Payment Webhook Event");
-//
-//        try {
-//            JSONObject json = new JSONObject(payload);
-//            String event = json.optString("event");
-//
-//            if ("payment_link.paid".equals(event)) {
-//                JSONObject paymentEntity = json.getJSONObject("payload")
-//                        .getJSONObject("payment_link")
-//                        .getJSONObject("entity");
-//
-//                JSONObject notes = paymentEntity.getJSONObject("notes");
-//                Long accountId = Long.parseLong(notes.getString("account_id"));
-//                int amountPaid = paymentEntity.getInt("amount") / 100; // In INR
-//
-//                int creditsToAdd = (amountPaid >= 2499) ? 100 : 30;
-//
-//                // 🔑 Add Credits to Database
-//                Account account = accountService.addCreditsToAccount(accountId, creditsToAdd);
-//
-//                // 🔑 Notify Broker on WhatsApp
-//                whatsAppSender.sendTextMessage(
-//                    account.getExternalId(),
-//                    """
-//                    🎉 *PAYMENT RECEIVED SUCCESSFULLY!*
-//                    
-//                    💰 *Amount Paid:* ₹%d
-//                    💳 *Credits Added:* +%d
-//                    📊 *Total Balance:* %d Credits
-//                    
-//                    Reply *UNLOCK* to instantly view your latest buyer lead!
-//                    """.formatted(amountPaid, creditsToAdd, account.getCreditsBalance())
-//                );
-//            }
-//
-//            return ResponseEntity.ok("PAYMENT_PROCESSED");
-//
-//        } catch (Exception e) {
-//            log.error("Payment Webhook Handling Failed", e);
-//            return ResponseEntity.ok("EVENT_HANDLED_WITH_ERRORS");
-//        }
-//    }
 }

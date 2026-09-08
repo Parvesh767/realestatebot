@@ -22,6 +22,7 @@ import com.risingbee.realestate.automation.parser.ParsedRequest;
 import com.risingbee.realestate.automation.parser.SimpleParser;
 import com.risingbee.realestate.automation.parser.WhatsAppPayloadExtractor;
 import com.risingbee.realestate.automation.repo.ProcessedMessageRepository;
+import com.risingbee.realestate.automation.service_hub.service.ServiceHubService;
 import com.risingbee.realestate.flow.ConversationFlow;
 import com.risingbee.realestate.flow.ConversationPhase;
 import com.risingbee.realestate.flow.FlowResolver;
@@ -53,6 +54,7 @@ public class WhatsAppService {
 	private final LeadService leadService;
 	private final LeadPaywallService leadPaywallService;
 	private final PaymentService paymentService;
+	private final ServiceHubService serviceHubService;
 
 	@Async // 🔑 Prevents blocking Meta's 3-second webhook timeout limit
 	public void handleIncoming(Map<String, Object> payload) {
@@ -60,19 +62,6 @@ public class WhatsAppService {
 		if (!extractor.isUserMessageEvent(payload)) {
 			return;
 		}
-
-		Optional<Actor> actorOpt = actorResolver.resolve(payload);
-		if (actorOpt.isEmpty()) {
-			log.warn("Could not resolve actor from WhatsApp payload");
-			return;
-		}
-
-		Actor actor = actorOpt.get();
-
-		withActorContext(actor, () -> handleIncomingWithActor(payload, actor));
-	}
-
-	private void handleIncomingWithActor(Map<String, Object> payload, Actor actor) {
 
 		Optional<String> phoneOpt = extractor.extractPhone(payload);
 		Optional<String> messageIdOpt = extractor.extractMessageId(payload);
@@ -83,30 +72,98 @@ public class WhatsAppService {
 
 		String from = phoneOpt.get();
 		String messageId = messageIdOpt.get();
-		String message = extractor.extractText(payload).map(String::trim).orElse("");
-		Optional<MediaInput> mediaOpt = extractor.extractImageMedia(payload);
 
-		// 1️⃣ IDEMPOTENCY CHECK (Run before standard DB writes)
+		// 1️⃣ IDEMPOTENCY CHECK (Run before any processing)
 		if (processedMessageRepository.existsByMessageId(messageId)) {
 			log.info("Duplicate WhatsApp message ignored: {}", messageId);
 			return;
 		}
 		processedMessageRepository.save(new ProcessedMessage(messageId));
 
-		// 2️⃣ Account Context Initialization
+		// Normalize input text safely
+		String rawMessage = extractor.extractText(payload).orElse("");
+		String cleanMessage = rawMessage.replace('\u00A0', ' ').trim();
+		String upperMessage = cleanMessage.toUpperCase();
+
+		// =========================================================================
+		// ⚡ GLOBAL TECHNICIAN DISPATCH INTERCEPTOR 
+		// (Allows field vendors to accept/complete jobs without requiring a broker account)
+		// =========================================================================
+		if (handleTechnicianCommands(from, cleanMessage, upperMessage)) {
+			return; // Exit cleanly so chat bots never intercept job commands
+		}
+
+		// 2️⃣ STANDARD ACTOR RESOLUTION FOR CHATBOT FLOWS
+		Optional<Actor> actorOpt = actorResolver.resolve(payload);
+		if (actorOpt.isEmpty()) {
+			log.warn("Could not resolve actor from WhatsApp payload for message: {}", cleanMessage);
+			return;
+		}
+
+		Actor actor = actorOpt.get();
+		withActorContext(actor, () -> handleIncomingWithActor(payload, actor, from, messageId, cleanMessage, upperMessage, messageIdOpt));
+	}
+
+	/**
+	 * Intercepts ACCEPT and COMPLETE commands sent by vendors.
+	 */
+	private boolean handleTechnicianCommands(String fromPhone, String cleanMessage, String upperMessage) {
+		try {
+			if (upperMessage.startsWith("ACCEPT")) {
+				String[] parts = cleanMessage.split("\\s+");
+				if (parts.length >= 2) {
+					Long bookingId = Long.parseLong(parts[1].replaceAll("[^0-9]", ""));
+					log.info("Received ACCEPT command for Booking #{} from {}", bookingId, fromPhone);
+
+					boolean accepted = serviceHubService.acceptJob(fromPhone, bookingId);
+					if (accepted) {
+						log.info("Job #{} successfully claimed by technician {}", bookingId, fromPhone);
+					} else {
+						log.warn("Job #{} could not be claimed by {}", bookingId, fromPhone);
+					}
+					return true;
+				}
+			}
+
+			if (upperMessage.startsWith("COMPLETE")) {
+				String[] parts = cleanMessage.split("\\s+");
+				if (parts.length >= 3) {
+					Long bookingId = Long.parseLong(parts[1].replaceAll("[^0-9]", ""));
+					String otp = parts[2].trim();
+					log.info("Received COMPLETE command for Booking #{} with OTP: {}", bookingId, otp);
+
+					serviceHubService.completeJobWithOtp(bookingId, otp);
+					log.info("Job #{} closed successfully with OTP", bookingId);
+					return true;
+				}
+			}
+		} catch (NumberFormatException nfe) {
+			log.warn("Invalid formatting in technician command: '{}'", cleanMessage);
+		} catch (Exception e) {
+			log.error("Failed to process technician command from {}: {}", fromPhone, e.getMessage(), e);
+			whatsAppSender.sendTextMessage(fromPhone, "❌ Command error: " + e.getMessage());
+			return true;
+		}
+		return false;
+	}
+
+	private void handleIncomingWithActor(Map<String, Object> payload, Actor actor, String from, String messageId, 
+										String cleanMessage, String upperMessage, Optional<String> messageIdOpt) {
+
+		Optional<MediaInput> mediaOpt = extractor.extractImageMedia(payload);
+
+		// Account Context Initialization
 		Account account = accountService.getOrCreate(actor.externalId());
 		actor = actor.withAccount(account);
 
-		// Inside handleIncomingWithActor(...) in WhatsAppService.java
-
-		String lower = message.toLowerCase().trim();
+		String lower = cleanMessage.toLowerCase();
 
 		if (lower.equalsIgnoreCase("unlock") || lower.startsWith("unlock")) {
 			handleLeadUnlockRequest(actor);
 			return;
 		}
 
-		// 3️⃣ Global Menu & Flow Chooser Trigger
+		// Global Menu & Flow Chooser Trigger
 		if (lower.equals("menu") || lower.equals("cancel") || lower.equals("start") || lower.equals("hi")) {
 			BrokerConversation conv = conversationService.getOrCreate(account.getId());
 			conv.startFlow(ConversationFlow.SEARCH, ConversationPhase.CHOOSING_FLOW);
@@ -116,17 +173,17 @@ public class WhatsAppService {
 			return;
 		}
 
-		// 4️⃣ Quick Confirmation / Positive Intent
-		if (isPositiveIntent(message)) {
+		// Quick Confirmation / Positive Intent
+		if (isPositiveIntent(cleanMessage)) {
 			yesHandler.handle(from, messageId);
 			return;
 		}
 
-		// 5️⃣ Stateful Flow Management
+		// Stateful Flow Management
 		BrokerConversation conversation = conversationService.getOrCreate(account.getId());
 
 		if (conversation.getPhase() == ConversationPhase.CHOOSING_FLOW) {
-			Optional<ConversationFlow> flowOpt = flowResolver.resolveExplicitChoice(message);
+			Optional<ConversationFlow> flowOpt = flowResolver.resolveExplicitChoice(cleanMessage);
 			if (flowOpt.isEmpty()) {
 				sendFlowChooser(from);
 				return;
@@ -135,9 +192,9 @@ public class WhatsAppService {
 			conversationService.save(conversation);
 		}
 
-		ParsedRequest parsed = SimpleParser.parse(message);
+		ParsedRequest parsed = SimpleParser.parse(cleanMessage);
 
-		// 6️⃣ Dynamic Intent Switcher (Onboarding → Search)
+		// Dynamic Intent Switcher (Onboarding → Search)
 		if (conversation.getFlow() == ConversationFlow.BROKER_ONBOARDING && parsed.hasSearchIntent()) {
 			log.info("Switching user intent from Onboarding to Search");
 
@@ -150,12 +207,12 @@ public class WhatsAppService {
 			return;
 		}
 
-		// 7️⃣ Flow Execution
+		// Flow Execution
 		switch (conversation.getFlow()) {
-		case BROKER_ONBOARDING -> brokerOnboardingHandler.handle(actor, message, messageIdOpt);
-		case SEARCH -> searchHandler.handle(actor, parsed);
-		case ADD_PROPERTY -> addPropertyHandler.handle(actor, message, mediaOpt, messageIdOpt);
-		default -> searchHandler.handle(actor, parsed);
+			case BROKER_ONBOARDING -> brokerOnboardingHandler.handle(actor, cleanMessage, messageIdOpt);
+			case SEARCH -> searchHandler.handle(actor, parsed);
+			case ADD_PROPERTY -> addPropertyHandler.handle(actor, cleanMessage, mediaOpt, messageIdOpt);
+			default -> searchHandler.handle(actor, parsed);
 		}
 	}
 
@@ -216,13 +273,10 @@ public class WhatsAppService {
 					formatAmount(unlockedDTO.maxBudget())));
 
 		} catch (InsufficientCreditsException e) {
-			// 🔥 FIX: Generate and include the recharge payment link here
 			String rechargeUrl;
 			try {
-				// If you have PaymentService wired:
 				rechargeUrl = paymentService.createRechargePaymentLink(accountId, actor.externalId(), 999);
 			} catch (Exception ex) {
-				// Fallback direct URL
 				rechargeUrl = "https://yourdomain.com/recharge?account=" + accountId;
 			}
 
@@ -244,15 +298,10 @@ public class WhatsAppService {
 		}
 	}
 
-	/**
-	 * Safely formats numerical amounts (Long, Integer, Double) into standard
-	 * comma-separated format. E.g., 15000 -> "15,000" or 15000000 -> "15,000,000"
-	 */
 	private String formatAmount(Number amount) {
 		if (amount == null) {
 			return "N/A";
 		}
 		return String.format("%,d", amount.longValue());
 	}
-
 }

@@ -1,6 +1,5 @@
 package com.risingbee.realestate.automation.parser;
 
-
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -17,199 +16,114 @@ import lombok.extern.slf4j.Slf4j;
 @RequiredArgsConstructor
 public class WhatsAppPayloadExtractor {
 
-	
-//	private final WhatsAppService whatsAppService;
-//    @SuppressWarnings("unchecked")
-//    public Optional<String> extractPhone(Map<String, Object> payload) {
-//        try {
-//            List<Map<String, Object>> entry =
-//                    (List<Map<String, Object>>) payload.get("entry");
-//            if (entry == null || entry.isEmpty()) return Optional.empty();
-//
-//            Map<String, Object> changes =
-//                    (Map<String, Object>) ((List<?>) entry.get(0).get("changes")).get(0);
-//            Map<String, Object> value =
-//                    (Map<String, Object>) changes.get("value");
-//
-//            List<Map<String, Object>> messages =
-//                    (List<Map<String, Object>>) value.get("messages");
-//            if (messages == null || messages.isEmpty()) return Optional.empty();
-//
-//            return Optional.ofNullable((String) messages.get(0).get("from"));
-//        } catch (Exception e) {
-//            log.warn("Failed to extract phone from WhatsApp payload", e);
-//            return Optional.empty();
-//        }
-//    }
-//  
-    
-    
-    
-	public Optional<String> extractPhone(Map<String, Object> payload) {
-		try {
-			return firstMap(payload, "entry").flatMap(entry -> firstMap(entry, "changes"))
-					.flatMap(change -> map(change, "value")).flatMap(value -> firstMap(value, "messages"))
-					.flatMap(msg -> string(msg, "from"));
-		} catch (Exception e) {
-			log.debug("extractPhone failed", e);
-			return Optional.empty();
-		}
-	}
-
-	public Optional<String> extractText(Map<String, Object> payload) {
-		try {
-			return firstMap(payload, "entry").flatMap(entry -> firstMap(entry, "changes"))
-					.flatMap(change -> map(change, "value")).flatMap(value -> firstMap(value, "messages"))
-					.flatMap(msg -> map(msg, "text")).flatMap(text -> string(text, "body"));
-		} catch (Exception e) {
-			log.debug("extractText failed", e);
-			return Optional.empty();
-		}
-	}
-
-	/* ---------------- Small safe helpers ---------------- */
-
-	public Optional<Map<String, Object>> map(Map<String, Object> src, String key) {
-		Object val = src.get(key);
-		if (val instanceof Map<?, ?> m) {
-			@SuppressWarnings("unchecked")
-			Map<String, Object> cast = (Map<String, Object>) m;
-			return Optional.of(cast);
-		}
-		return Optional.empty();
-	}
-
-	private Optional<Map<String, Object>> firstMap(Map<String, Object> src, String key) {
-		Object val = src.get(key);
-		if (val instanceof List<?> list && !list.isEmpty() && list.get(0) instanceof Map<?, ?> m) {
-			@SuppressWarnings("unchecked")
-			Map<String, Object> cast = (Map<String, Object>) m;
-			return Optional.of(cast);
-		}
-		return Optional.empty();
-	}
-
-	private Optional<String> string(Map<String, Object> src, String key) {
-		Object val = src.get(key);
-		return (val instanceof String s) ? Optional.of(s) : Optional.empty();
-	}
-
-	
-	@SuppressWarnings("unchecked")
-	public Optional<MediaInput> extractImageMedia(Map<String, Object> payload) {
-
-	    try {
-	        List<Map<String, Object>> entry =
-	            (List<Map<String, Object>>) payload.get("entry");
-	        if (entry == null || entry.isEmpty()) return Optional.empty();
-
-	        List<Map<String, Object>> changes =
-	            (List<Map<String, Object>>) entry.get(0).get("changes");
-	        if (changes == null || changes.isEmpty()) return Optional.empty();
-
-	        Map<String, Object> value =
-	            (Map<String, Object>) changes.get(0).get("value");
-
-	        List<Map<String, Object>> messages =
-	            (List<Map<String, Object>>) value.get("messages");
-	        if (messages == null || messages.isEmpty()) return Optional.empty();
-
-	        Map<String, Object> msg = messages.get(0);
-
-	        if (!"image".equals(msg.get("type"))) {
-	            return Optional.empty();
-	        }
-
-	        Map<String, Object> image =
-	            (Map<String, Object>) msg.get("image");
-
-	        String mediaId = (String) image.get("id");
-	        String mimeType = (String) image.get("mime_type");
-
-	        if (mediaId == null) return Optional.empty();
-
-	        return Optional.of(new MediaInput(mediaId, mimeType));
-
-	    } catch (Exception e) {
-	        log.warn("Failed to extract image media", e);
-	        return Optional.empty();
-	    }
-	}
-	
-    @SuppressWarnings("unchecked")
-    public boolean isUserMessageEvent(Map<String, Object> payload) {
-
+    public Optional<String> extractPhone(Map<String, Object> payload) {
         try {
-            List<Map<String, Object>> entry =
-                (List<Map<String, Object>>) payload.get("entry");
-            if (entry == null || entry.isEmpty()) return false;
-
-            List<Map<String, Object>> changes =
-                (List<Map<String, Object>>) entry.get(0).get("changes");
-            if (changes == null || changes.isEmpty()) return false;
-
-            Map<String, Object> value =
-                (Map<String, Object>) changes.get(0).get("value");
-
-            return value.containsKey("messages");
-
+            return firstMap(payload, "entry")
+                    .flatMap(entry -> firstMap(entry, "changes"))
+                    .flatMap(change -> map(change, "value"))
+                    .flatMap(value -> firstMap(value, "messages"))
+                    .flatMap(msg -> string(msg, "from"));
         } catch (Exception e) {
-            return false;
-        }
-    }
-    
-    
-    public Optional<String> extractMessageId(Map<String, Object> payload) {
-
-        try {
-            Object entryObj = payload.get("entry");
-            if (!(entryObj instanceof List<?> entryList) || entryList.isEmpty()) {
-                return Optional.empty();
-            }
-
-            Object entry0 = entryList.get(0);
-            if (!(entry0 instanceof Map<?, ?> entry)) {
-                return Optional.empty();
-            }
-
-            Object changesObj = entry.get("changes");
-            if (!(changesObj instanceof List<?> changes) || changes.isEmpty()) {
-                return Optional.empty();
-            }
-
-            Object change0 = changes.get(0);
-            if (!(change0 instanceof Map<?, ?> change)) {
-                return Optional.empty();
-            }
-
-            Object valueObj = change.get("value");
-            if (!(valueObj instanceof Map<?, ?> value)) {
-                return Optional.empty();
-            }
-
-            Object messagesObj = value.get("messages");
-            if (!(messagesObj instanceof List<?> messages) || messages.isEmpty()) {
-                return Optional.empty();
-            }
-
-            Object msg0 = messages.get(0);
-            if (!(msg0 instanceof Map<?, ?> message)) {
-                return Optional.empty();
-            }
-
-            Object id = message.get("id");
-            return (id instanceof String)
-                    ? Optional.of((String) id)
-                    : Optional.empty();
-
-        } catch (Exception e) {
+            log.debug("extractPhone failed", e);
             return Optional.empty();
         }
     }
 
+    public Optional<String> extractText(Map<String, Object> payload) {
+        try {
+            return firstMap(payload, "entry")
+                    .flatMap(entry -> firstMap(entry, "changes"))
+                    .flatMap(change -> map(change, "value"))
+                    .flatMap(value -> firstMap(value, "messages"))
+                    .flatMap(msg -> map(msg, "text"))
+                    .flatMap(text -> string(text, "body"));
+        } catch (Exception e) {
+            log.debug("extractText failed", e);
+            return Optional.empty();
+        }
+    }
 
+    public Optional<String> extractMessageId(Map<String, Object> payload) {
+        try {
+            return firstMap(payload, "entry")
+                    .flatMap(entry -> firstMap(entry, "changes"))
+                    .flatMap(change -> map(change, "value"))
+                    .flatMap(value -> firstMap(value, "messages"))
+                    .flatMap(msg -> string(msg, "id"));
+        } catch (Exception e) {
+            log.debug("extractMessageId failed", e);
+            return Optional.empty();
+        }
+    }
 
+    public boolean isUserMessageEvent(Map<String, Object> payload) {
+        try {
+            return firstMap(payload, "entry")
+                    .flatMap(entry -> firstMap(entry, "changes"))
+                    .flatMap(change -> map(change, "value"))
+                    .map(value -> value.containsKey("messages"))
+                    .orElse(false);
+        } catch (Exception e) {
+            return false;
+        }
+    }
 
+    public Optional<MediaInput> extractImageMedia(Map<String, Object> payload) {
+        try {
+            Optional<Map<String, Object>> msgOpt = firstMap(payload, "entry")
+                    .flatMap(entry -> firstMap(entry, "changes"))
+                    .flatMap(change -> map(change, "value"))
+                    .flatMap(value -> firstMap(value, "messages"));
 
-	
+            if (msgOpt.isEmpty()) return Optional.empty();
+
+            Map<String, Object> msg = msgOpt.get();
+            String type = (String) msg.get("type");
+            if (!"image".equals(type)) {
+                return Optional.empty();
+            }
+
+            Optional<Map<String, Object>> imageOpt = map(msg, "image");
+            if (imageOpt.isEmpty()) return Optional.empty();
+
+            Map<String, Object> image = imageOpt.get();
+            String mediaId = (String) image.get("id");
+            String mimeType = (String) image.get("mime_type");
+
+            if (mediaId == null) return Optional.empty();
+
+            return Optional.of(new MediaInput(mediaId, mimeType));
+
+        } catch (Exception e) {
+            log.warn("Failed to extract image media", e);
+            return Optional.empty();
+        }
+    }
+
+    /* ---------------- Small safe helpers ---------------- */
+
+    public Optional<Map<String, Object>> map(Map<String, Object> src, String key) {
+        Object val = src.get(key);
+        if (val instanceof Map<?, ?> m) {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> cast = (Map<String, Object>) m;
+            return Optional.of(cast);
+        }
+        return Optional.empty();
+    }
+
+    private Optional<Map<String, Object>> firstMap(Map<String, Object> src, String key) {
+        Object val = src.get(key);
+        if (val instanceof List<?> list && !list.isEmpty() && list.get(0) instanceof Map<?, ?> m) {
+            @SuppressWarnings("unchecked")
+            Map<String, Object> cast = (Map<String, Object>) m;
+            return Optional.of(cast);
+        }
+        return Optional.empty();
+    }
+
+    private Optional<String> string(Map<String, Object> src, String key) {
+        Object val = src.get(key);
+        return (val instanceof String s) ? Optional.of(s) : Optional.empty();
+    }
 }

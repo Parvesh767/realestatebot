@@ -1,38 +1,28 @@
 package com.risingbee.realestate.automation.dto;
 
-
+import java.time.Instant;
 import java.util.List;
+import com.risingbee.realestate.automation.domain.enums.FurnishingType;
+import com.risingbee.realestate.automation.domain.enums.PropertyType;
 
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
-
-@Getter
-@Setter
-@Builder
-@NoArgsConstructor
-@AllArgsConstructor
-public class PropertyResponseDTO {
-
-    private Long id;
-    private String title;
-    private String bhk;
-
-    /** Canonical location (for filters / logic) */
-    private String cityCode;
-    private String localityCode;
-
-    /** Optional display string (NOT used for logic) */
-    private String displayLocation;
-
-    private Long price;
-    private String description;
-    private String mapLink;
-
-    private List<String> photos;
-    private boolean active;
-}
-
-
+public record PropertyResponseDTO(
+    Long id,
+    Long ownerAccountId,
+    String title,
+    String bhk,
+    Long price,
+    Long securityDeposit,
+    Integer floorNumber,
+    PropertyType propertyType,
+    FurnishingType furnishing,
+    String cityCode,
+    String localityCode,
+    String displayLocation,
+    String description,
+    String mapLink,
+    String videoTourUrl,
+    List<String> photos,
+    List<String> amenities,
+    boolean active,
+    Instant createdAt
+) {}

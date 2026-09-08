@@ -61,4 +61,6 @@ public interface LeadRepository extends JpaRepository<Lead, Long> {
      * Fetches the most recent locked lead for a specific broker account.
      */
     Optional<Lead> findTopByOwnerAccountIdAndUnlockedFalseOrderByCreatedAtDesc(Long ownerAccountId);
+
+	Optional<Lead> findTopByOwnerAccountIdAndPhoneNumberOrderByCreatedAtDesc(Long ownerAccountId, String replaceAll);
 }

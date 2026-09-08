@@ -8,6 +8,7 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import com.risingbee.realestate.automation.domain.Property;
+import com.risingbee.realestate.automation.domain.enums.FurnishingType;
 
 @Repository
 public interface PropertyRepository extends JpaRepository<Property, Long> {
@@ -38,4 +39,30 @@ public interface PropertyRepository extends JpaRepository<Property, Long> {
      * Retrieves all properties owned by a specific account ID.
      */
     List<Property> findByOwnerAccountId(Long ownerAccountId);
+    
+    
+
+    List<Property> findByOwnerAccountIdOrderByCreatedAtDesc(Long ownerAccountId);
+
+    @Query("""
+        SELECT p FROM Property p
+        WHERE p.active = true
+          AND (:bhk IS NULL OR p.bhk = :bhk)
+          AND (:cityCode IS NULL OR p.cityCode = :cityCode)
+          AND (:localityCode IS NULL OR p.localityCode = :localityCode)
+          AND (:furnishing IS NULL OR p.furnishing = :furnishing)
+          AND (:min IS NULL OR p.price >= :min)
+          AND (:max IS NULL OR p.price <= :max)
+        ORDER BY p.price ASC, p.id DESC
+    """)
+    List<Property> searchPublicFiltered(
+        @Param("bhk") String bhk,
+        @Param("cityCode") String cityCode,
+        @Param("localityCode") String localityCode,
+        @Param("furnishing") FurnishingType furnishing,
+        @Param("min") Long min,
+        @Param("max") Long max
+    );
+    
+    
 }

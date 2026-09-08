@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Rent & Utility Ledger — Property Hub</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen antialiased flex flex-col justify-between selection:bg-indigo-500 selection:text-white">
+
+  <!-- Include Common Navbar -->
+  <div th:replace="~{fragments/header :: navbar}"></div>
+
+  <main class="max-w-6xl mx-auto px-6 py-8 w-full space-y-6">
+    <div class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-gradient-to-r from-slate-900 via-indigo-950/30 to-slate-900 border border-slate-800 p-6 rounded-3xl">
+      <div>
+        <h2 class="text-xl font-bold text-white" th:text="'Rent Ledger — Property #' + ${contract.propertyId}">Rent Ledger</h2>
+        <p class="text-xs text-slate-400 mt-1">
+          Base Rent: <span class="font-mono font-bold text-emerald-400">₹<span th:text="${#numbers.formatInteger(contract.monthlyRent, 0, 'COMMA')}">28,000</span>/mo</span>
+        </p>
+      </div>
+      <div class="flex items-center gap-3">
+        <button onclick="openGenerateModal()" class="inline-flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold shadow-lg shadow-indigo-600/20 transition">
+          <i data-lucide="plus" class="w-4 h-4"></i> Generate Monthly Bill
+        </button>
+      </div>
+    </div>
+
+    <!-- Quick Financial Metrics -->
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div class="p-5 rounded-2xl bg-slate-900/60 border border-slate-800">
+        <div class="text-slate-400 text-xs font-medium uppercase tracking-wider mb-1">Total Outstanding Arrears</div>
+        <div class="text-2xl font-black font-mono" th:classappend="${pendingArrears > 0 ? 'text-red-400' : 'text-emerald-400'}">
+          ₹ <span th:text="${#numbers.formatInteger(pendingArrears, 0, 'COMMA')}">0</span>
+        </div>
+      </div>
+      <div class="p-5 rounded-2xl bg-slate-900/60 border border-slate-800">
+        <div class="text-slate-400 text-xs font-medium uppercase tracking-wider mb-1">Total Invoices Logged</div>
+        <div class="text-2xl font-bold text-white font-mono" th:text="${#lists.size(schedules)}">0</div>
+      </div>
+      <div class="p-5 rounded-2xl bg-slate-900/60 border border-slate-800">
+        <div class="text-slate-400 text-xs font-medium uppercase tracking-wider mb-1">WhatsApp Auto-Notice</div>
+        <div class="text-2xl font-bold text-indigo-400 flex items-center gap-2">
+          <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> Active
+        </div>
+      </div>
+    </div>
+
+    <!-- Table -->
+    <div class="bg-slate-900/60 border border-slate-800 rounded-3xl p-6">
+      <div class="overflow-x-auto mt-4">
+        <table class="w-full text-left border-collapse text-xs">
+          <thead>
+            <tr class="text-slate-400 uppercase text-[10px] font-bold tracking-wider border-b border-slate-800">
+              <th class="py-3 px-4">Cycle Month</th>
+              <th class="py-3 px-4">Due Date</th>
+              <th class="py-3 px-4">Base Rent</th>
+              <th class="py-3 px-4">Utilities (EB/Maint)</th>
+              <th class="py-3 px-4">Total Due</th>
+              <th class="py-3 px-4">Status</th>
+              <th class="py-3 px-4 text-right">Action</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-800/80 text-slate-300">
+            <tr th:if="${#lists.isEmpty(schedules)}">
+              <td colspan="7" class="py-12 text-center text-slate-500">No monthly invoices generated yet.</td>
+            </tr>
+			
+			<td class="py-4 px-4 text-right">
+			  <div class="inline-flex items-center gap-2 justify-end" th:if="${r != null and r.status != null}">
+			    
+			    <!-- If tenant uploaded proof and status is not PAID -->
+			    <div th:if="${r.status.name() != 'PAID' and r.receiptPhotoUrl != null}">
+			      <a th:href="${r.receiptPhotoUrl}" target="_blank" class="px-2.5 py-1.5 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30 text-[11px] font-semibold inline-flex items-center gap-1">
+			        <i data-lucide="image" class="w-3 h-3"></i> View Proof
+			      </a>
+			      <button th:data-id="${r.id}"
+			              th:data-amount="${r.totalDueInr}"
+			              onclick="openPaymentModal(this)"
+			              class="px-2.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-[11px] transition">
+			        Verify & Approve
+			      </button>
+			    </div>
+
+			    <!-- Standard Reminder & Mark Paid if no proof yet -->
+			    <div th:if="${r.status.name() != 'PAID' and r.receiptPhotoUrl == null}" class="inline-flex items-center gap-2">
+			      <button th:onclick="'sendWhatsAppReminder(' + ${contract.id} + ', ' + ${r.id} + ')'"
+			              class="px-2.5 py-1.5 rounded-xl bg-indigo-600/20 hover:bg-indigo-600 text-indigo-400 hover:text-white border border-indigo-500/30 font-semibold text-[11px] transition">
+			        <i data-lucide="send" class="w-3 h-3"></i> Reminder
+			      </button>
+			      <button th:data-id="${r.id}"
+			              th:data-amount="${r.totalDueInr}"
+			              onclick="openPaymentModal(this)"
+			              class="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-[11px] transition">
+			        Mark Paid
+			      </button>
+			    </div>
+
+			    <!-- Paid Badge -->
+			    <span th:if="${r.status.name() == 'PAID'}" class="text-[10px] text-slate-400 bg-slate-800 px-2.5 py-1 rounded-lg font-mono font-bold border border-slate-700">
+			      PAID (<span th:text="${r.paymentMode}">UPI</span>)
+			    </span>
+			  </div>
+			</td>
+			
+			<tr th:each="r : ${schedules}" class="hover:bg-slate-800/40 transition">
+			  <td class="py-4 px-4 font-bold text-white" th:text="${r.billingCycleMonth}">September 2026</td>
+			  <td class="py-4 px-4 font-mono text-slate-400" th:text="${r.dueDate}">2026-09-05</td>
+			  <td class="py-4 px-4 font-mono text-slate-300">₹<span th:text="${#numbers.formatInteger(r.baseRentInr, 0, 'COMMA')}">28,000</span></td>
+			  <td class="py-4 px-4 text-slate-400">
+			    <span>EB: ₹<span th:text="${r.electricityInr}">0</span></span> | 
+			    <span>Maint: ₹<span th:text="${r.maintenanceInr}">0</span></span>
+			  </td>
+			  <td class="py-4 px-4 font-mono font-bold text-emerald-400 text-sm">
+			    ₹<span th:text="${#numbers.formatInteger(r.totalDueInr, 0, 'COMMA')}">32,700</span>
+			  </td>
+			  <td class="py-4 px-4">
+			    <span th:if="${r.status.name() == 'PAID'}" class="px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">PAID</span>
+			    <span th:if="${r.status.name() == 'PENDING'}" class="px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20">PENDING</span>
+			    <span th:if="${r.status.name() == 'OVERDUE'}" class="px-2.5 py-1 rounded-full text-[10px] font-bold bg-red-500/10 text-red-400 border border-red-500/20">OVERDUE</span>
+			  </td>
+			  
+			  <!-- Single Unified Action Column -->
+			  <td class="py-4 px-4 text-right">
+			    <div class="inline-flex items-center gap-2 justify-end">
+			      <!-- Send WhatsApp Reminder Button (Appears only when NOT PAID) -->
+			      <button th:if="${r.status.name() != 'PAID'}"
+			              th:onclick="'sendWhatsAppReminder(' + ${contract.id} + ', ' + ${r.id} + ')'"
+			              class="px-2.5 py-1.5 rounded-xl bg-indigo-600/20 hover:bg-indigo-600 text-indigo-400 hover:text-white border border-indigo-500/30 font-semibold text-[11px] transition inline-flex items-center gap-1"
+			              title="Send WhatsApp UPI Reminder">
+			        <i data-lucide="send" class="w-3 h-3"></i> Reminder
+			      </button>
+
+			      <!-- Mark Paid Button (Appears only when NOT PAID) -->
+			      <button th:if="${r.status.name() != 'PAID'}" 
+			              th:data-id="${r.id}"
+			              th:data-amount="${r.totalDueInr}"
+			              onclick="openPaymentModal(this)"
+			              class="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-[11px] shadow-sm transition">
+			        Mark Paid
+			      </button>
+			      
+			      <!-- Payment Mode Badge (Appears when PAID) -->
+			      <span th:if="${r.status.name() == 'PAID'}" class="text-[10px] text-slate-400 bg-slate-800 px-2.5 py-1 rounded-lg font-mono font-bold border border-slate-700" th:text="${r.paymentMode}">UPI</span>
+			    </div>
+			  </td>
+			</tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+
+  <!-- Modals -->
+  <div id="generate-modal" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm hidden items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-800 w-full max-w-md rounded-3xl p-6 relative">
+      <button onclick="closeGenerateModal()" class="absolute top-4 right-4 text-slate-400 hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
+      <h3 class="text-base font-bold text-white mb-1">Generate Monthly Rent Invoice</h3>
+      <form id="generate-form" onsubmit="submitGenerateBill(event)" class="space-y-3 mt-4">
+        <input type="hidden" id="gen-contract-id" th:value="${contract.id}" />
+		<div>
+		  <label class="block text-[10px] font-bold uppercase text-slate-400 mb-1">Billing Cycle Month *</label>
+		  <input type="month" id="gen-month" required 
+		         class="w-full px-3.5 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white" />
+		</div>
+        <div>
+          <label class="block text-[10px] font-bold uppercase text-slate-400 mb-1">Payment Due Date *</label>
+          <input type="date" id="gen-due-date" required class="w-full px-3.5 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white" />
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="block text-[10px] font-bold uppercase text-slate-400 mb-1">Electricity (₹)</label>
+            <input type="number" id="gen-eb" placeholder="2400" value="0" class="w-full px-3.5 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white" />
+          </div>
+          <div>
+            <label class="block text-[10px] font-bold uppercase text-slate-400 mb-1">Maintenance (₹)</label>
+            <input type="number" id="gen-maint" placeholder="2000" value="0" class="w-full px-3.5 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white" />
+          </div>
+        </div>
+        <button type="submit" class="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl shadow-lg transition mt-4">Generate & Send WhatsApp Bill</button>
+      </form>
+    </div>
+  </div>
+
+  <div id="payment-modal" class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm hidden items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-800 w-full max-w-sm rounded-3xl p-6 relative">
+      <button onclick="closePaymentModal()" class="absolute top-4 right-4 text-slate-400 hover:text-white"><i data-lucide="x" class="w-5 h-5"></i></button>
+      <h3 class="text-base font-bold text-white mb-1">Record Rent Received</h3>
+      <form id="payment-form" onsubmit="submitPayment(event)" class="space-y-3 mt-4">
+        <input type="hidden" id="pay-schedule-id" />
+        <div>
+          <label class="block text-[10px] font-bold uppercase text-slate-400 mb-1">Amount Received (₹) *</label>
+          <input type="number" id="pay-amount" required class="w-full px-3.5 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white font-mono font-bold" />
+        </div>
+        <div>
+          <label class="block text-[10px] font-bold uppercase text-slate-400 mb-1">Payment Mode</label>
+          <select id="pay-mode" class="w-full px-3.5 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white">
+            <option value="UPI">UPI Transfer</option>
+            <option value="BANK_TRANSFER">NEFT / IMPS Bank Transfer</option>
+            <option value="CASH">Cash Payment</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-[10px] font-bold uppercase text-slate-400 mb-1">Transaction Ref / UTR</label>
+          <input type="text" id="pay-ref" placeholder="UPI/20260902/893471" class="w-full px-3.5 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white" />
+        </div>
+        <button type="submit" class="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-lg transition mt-4">Confirm Payment & Send Receipts</button>
+      </form>
+    </div>
+  </div>
+
+  <footer class="border-t border-slate-800/80 py-6 text-center text-xs text-slate-500">
+    <p>Property Hub — Unified Tenancy & Rent Tracking Ledger</p>
+  </footer>
+
+  <!-- Include Common Header Scripts -->
+  <div th:replace="~{fragments/header :: navScripts}"></div>
+
+  <script>
+    function openGenerateModal() {
+      document.getElementById('generate-modal').classList.remove('hidden');
+      document.getElementById('generate-modal').classList.add('flex');
+    }
+    function closeGenerateModal() {
+      document.getElementById('generate-modal').classList.add('hidden');
+      document.getElementById('generate-modal').classList.remove('flex');
+    }
+    function openPaymentModal(btn) {
+      document.getElementById('pay-schedule-id').value = btn.getAttribute('data-id');
+      document.getElementById('pay-amount').value = btn.getAttribute('data-amount');
+      document.getElementById('payment-modal').classList.remove('hidden');
+      document.getElementById('payment-modal').classList.add('flex');
+    }
+    function closePaymentModal() {
+      document.getElementById('payment-modal').classList.add('hidden');
+      document.getElementById('payment-modal').classList.remove('flex');
+    }
+
+    async function submitGenerateBill(e) {
+      e.preventDefault();
+      const contractId = document.getElementById('gen-contract-id').value;
+      const payload = {
+        billingCycleMonth: document.getElementById('gen-month').value,
+        dueDate: document.getElementById('gen-due-date').value,
+        electricityInr: Number(document.getElementById('gen-eb').value || 0),
+        maintenanceInr: Number(document.getElementById('gen-maint').value || 0),
+        waterInr: 0
+      };
+
+      const res = await fetch(`/api/rents/contracts/${contractId}/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        credentials: 'same-origin'
+      });
+      if (res.ok) window.location.reload();
+      else alert('Failed to generate rent bill.');
+    }
+
+    async function submitPayment(e) {
+      e.preventDefault();
+      const scheduleId = document.getElementById('pay-schedule-id').value;
+      const payload = {
+        amountPaid: Number(document.getElementById('pay-amount').value),
+        paymentMode: document.getElementById('pay-mode').value,
+        transactionReference: document.getElementById('pay-ref').value
+      };
+
+      const res = await fetch(`/api/rents/${scheduleId}/pay`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        credentials: 'same-origin'
+      });
+      if (res.ok) window.location.reload();
+      else alert('Failed to record payment.');
+    }
+	
+	
+	async function sendWhatsAppReminder(contractId, scheduleId) {
+	      if (!confirm('Send automated WhatsApp payment reminder and UPI link to the tenant?')) return;
+
+	      try {
+	        const res = await fetch(`/api/tenancy/${contractId}/rents/${scheduleId}/remind`, {
+	          method: 'POST',
+	          credentials: 'same-origin'
+	        });
+	        
+	        const data = await res.json();
+	        if (res.ok && data.success) {
+	          alert('🎉 WhatsApp payment reminder sent successfully!');
+	        } else {
+	          alert('Failed to send reminder: ' + (data.error || 'Unknown error'));
+	        }
+	      } catch (err) {
+	        console.error(err);
+	        alert('Error connecting to communication server.');
+	      }
+	    }
+	
+
+    document.addEventListener('DOMContentLoaded', () => {
+      syncNavState();
+      lucide.createIcons();
+    });
+  </script>
+</body>
+</html>

@@ -1,28 +1,22 @@
 package com.risingbee.realestate.automation.domain;
 
-import java.time.Instant;
-import java.util.ArrayList;
-import java.util.List;
-
+import com.risingbee.realestate.leads.enums.LeadSource;
+import com.risingbee.realestate.leads.enums.LeadStatus;
+import jakarta.persistence.*;
+import lombok.Getter;
+import lombok.Setter;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
-import com.risingbee.realestate.leads.enums.LeadSource;
-import com.risingbee.realestate.leads.enums.LeadStatus;
-
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
-import lombok.Getter;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
 
 @Entity
 @Table(name = "leads")
 @Getter
+@Setter
 public class Lead {
 
     @Id
@@ -32,7 +26,17 @@ public class Lead {
     private String phoneNumber;
     private String name;
 
-    // 🔑 Upgraded to Long to prevent Integer overflow on Lakhs/Crores
+    // Direct property inquiry link
+    private Long propertyId;
+
+    // Tenant account ID for reputation score enrichment
+    private Long tenantAccountId;
+
+    // Move-in timeline & visit scheduling
+    private Integer urgencyDays;
+    private LocalDate preferredVisitDate;
+
+    // Upgraded to Long to prevent Integer overflow
     private Long minBudget;
     private Long maxBudget;
     private String bhk;
@@ -43,10 +47,10 @@ public class Lead {
     @Column(columnDefinition = "text")
     private String rawMessage;
 
-    private Instant createdAt;
+    private Instant createdAt = Instant.now();
 
     @Enumerated(EnumType.STRING)
-    private LeadStatus status;
+    private LeadStatus status = LeadStatus.NEW;
 
     private Instant nextFollowUpAt;
 
@@ -55,18 +59,18 @@ public class Lead {
 
     private Boolean archived = false;
 
-    private Instant updatedAt;
+    private Instant updatedAt = Instant.now();
 
     @Enumerated(EnumType.STRING)
-    private LeadSource source;
+    private LeadSource source ;
 
-    private Boolean qualified;
+    private Boolean qualified = true;
 
     @Column(name = "owner_account_id", nullable = false)
     private Long ownerAccountId;
 
     /* ====================================
-       💰 DAY 4 MONETIZATION & PAYWALL
+       💰 MONETIZATION & PAYWALL
        ==================================== */
     @Column(nullable = false)
     private Boolean unlocked = false;
@@ -80,17 +84,18 @@ public class Lead {
     @JdbcTypeCode(SqlTypes.JSON)
     private List<String> confirmedMessageIds = new ArrayList<>();
 
-    protected Lead() {}
+    public Lead() {}
 
     public Lead(
-        String phoneNumber,
-        Long ownerAccountId,
-        String bhk,
-        Long minBudget,
-        Long maxBudget,
-        String cityCode,
-        String localityCode,
-        String rawMessage
+            String phoneNumber,
+            Long ownerAccountId,
+            String bhk,
+            Long minBudget,
+            Long maxBudget,
+            String cityCode,
+            String localityCode,
+            String rawMessage
+            
     ) {
         this.status = LeadStatus.NEW;
         this.phoneNumber = phoneNumber;
@@ -102,14 +107,10 @@ public class Lead {
         this.localityCode = localityCode;
         this.rawMessage = rawMessage;
         this.qualified = true;
-        this.unlocked = false; // Default: Phone number masked until unlocked
+        this.unlocked = false;
         this.createdAt = Instant.now();
         this.updatedAt = Instant.now();
     }
-
-    /* ------------------------------------
-       DOMAIN MUTATIONS & MONETIZATION
-       ------------------------------------ */
 
     public void unlock() {
         this.unlocked = true;
@@ -130,19 +131,13 @@ public class Lead {
         this.updatedAt = Instant.now();
     }
 
-    /**
-     * Safe status updater from frontend string values.
-     */
     public void updateStatusFromString(String statusStr) {
-        if (statusStr == null || statusStr.isBlank()) {
-            return;
-        }
+        if (statusStr == null || statusStr.isBlank()) return;
         String cleanStatus = statusStr.trim().toUpperCase();
         try {
             this.status = LeadStatus.valueOf(cleanStatus);
             this.updatedAt = Instant.now();
         } catch (IllegalArgumentException e) {
-            // Flexible match for composite statuses (e.g. SITE_VISIT -> SITE_VISIT_SCHEDULED)
             for (LeadStatus s : LeadStatus.values()) {
                 if (s.name().startsWith(cleanStatus) || cleanStatus.startsWith(s.name())) {
                     this.status = s;

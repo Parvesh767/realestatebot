@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>My Home & Rent Portal — Property Hub</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen antialiased flex flex-col justify-between selection:bg-indigo-500 selection:text-white">
+
+  <!-- Tenant Header -->
+  <header class="border-b border-slate-800 bg-slate-900/60 backdrop-blur-md sticky top-0 z-50">
+    <div class="max-w-5xl mx-auto px-6 h-16 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-xl bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400">
+          <i data-lucide="home" class="w-5 h-5"></i>
+        </div>
+        <div>
+          <span class="text-sm font-bold text-white block">Tenant Portal</span>
+          <span class="text-[11px] text-slate-400 font-mono" th:text="'+' + ${actor.externalId()}">+911234567890</span>
+        </div>
+      </div>
+      <a href="/web/auth/logout" class="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition flex items-center gap-1.5 text-xs font-semibold" title="Logout">
+        <i data-lucide="log-out" class="w-4 h-4"></i> Logout
+      </a>
+    </div>
+  </header>
+
+  <main class="max-w-5xl mx-auto my-8 px-6 w-full space-y-6">
+
+    <!-- Case: No Active Lease -->
+    <div th:if="${contract == null}" class="bg-slate-900 border border-slate-800 rounded-3xl p-12 text-center space-y-3">
+      <div class="w-12 h-12 rounded-2xl bg-indigo-600/20 text-indigo-400 flex items-center justify-center mx-auto">
+        <i data-lucide="file-question" class="w-6 h-6"></i>
+      </div>
+      <h2 class="text-base font-bold text-white">No Active Tenancy Found</h2>
+      <p class="text-xs text-slate-400 max-w-sm mx-auto">You do not have any active leases linked to this phone number yet.</p>
+    </div>
+
+    <!-- Active Lease Section -->
+    <div th:if="${contract != null}" class="space-y-6">
+
+      <!-- Active Technician Visits Banner -->
+      <div th:if="${activeBookings != null and !#lists.isEmpty(activeBookings)}" class="space-y-3">
+        <div th:each="b : ${activeBookings}" 
+             class="p-5 bg-gradient-to-r from-amber-500/10 via-slate-900 to-indigo-950/40 border border-amber-500/30 rounded-3xl shadow-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          
+          <div class="flex items-center gap-3.5">
+            <div class="w-12 h-12 rounded-2xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
+              <i th:data-lucide="${b.status.name() == 'ASSIGNED' ? 'shield-check' : 'loader'}" class="w-6 h-6"></i>
+            </div>
+            <div>
+              <div class="flex items-center gap-2">
+                <span class="text-xs font-bold text-white" th:text="${b.serviceItem != null ? b.serviceItem.title : 'Service Request'}">Service Task</span>
+                <span th:if="${b.status.name() == 'ASSIGNED'}" class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                  Technician Assigned
+                </span>
+                <span th:if="${b.status.name() == 'PENDING'}" class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                  Matching Technician...
+                </span>
+              </div>
+              <p class="text-[11px] text-slate-400 mt-0.5" th:text="'Slot: ' + ${b.preferredDate} + ' (' + ${b.preferredTimeSlot} + ')'"></p>
+              <p th:if="${b.status.name() == 'ASSIGNED'}" class="text-[10px] text-amber-400/90 font-medium">
+                ⚠️ Share this completion PIN with technician only after work is verified.
+              </p>
+            </div>
+          </div>
+
+          <div th:if="${b.status.name() == 'ASSIGNED'}" class="bg-slate-900 border border-amber-500/40 px-5 py-2.5 rounded-2xl text-center self-stretch sm:self-auto shrink-0 shadow-lg">
+            <span class="text-[10px] font-bold uppercase tracking-wider text-slate-400 block font-mono">Completion OTP</span>
+            <span class="text-2xl font-black text-amber-400 font-mono tracking-widest" th:text="${b.completionOtp}">0000</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Property Summary Card -->
+      <div class="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+        <div>
+          <div class="flex items-center gap-2 mb-1.5">
+            <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+              Active Tenancy
+            </span>
+            <span class="text-xs text-slate-400 font-mono" th:text="'Contract #' + ${contract.id}">Contract #12</span>
+          </div>
+          <h1 class="text-xl font-black text-white" th:text="${property != null ? property.title : 'My Rented Home'}">Property Title</h1>
+          <p class="text-xs text-slate-400 mt-1" th:text="'Lease valid: ' + ${contract.startDate} + ' to ' + ${contract.endDate}">Lease period</p>
+        </div>
+
+        <div class="flex items-center gap-6 border-t md:border-t-0 md:border-l border-slate-800 pt-4 md:pt-0 md:pl-6 w-full md:w-auto">
+          <div>
+            <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Monthly Rent</span>
+            <span class="text-lg font-black text-white font-mono" th:text="'₹' + ${#numbers.formatInteger(contract.monthlyRent, 0, 'COMMA')}">₹25,000</span>
+          </div>
+          <div>
+            <span class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Security Deposit</span>
+            <span class="text-lg font-black text-indigo-400 font-mono" th:text="'₹' + ${#numbers.formatInteger(contract.securityDeposit, 0, 'COMMA')}">₹50,000</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Current Invoice, Quick Contacts & Deposit Refund Status -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        
+        <!-- Current Invoice Card -->
+        <div class="bg-gradient-to-br from-indigo-950/40 via-slate-900 to-slate-900 border border-indigo-500/20 rounded-3xl p-6 shadow-xl space-y-4 flex flex-col justify-between">
+          <div class="space-y-4">
+            <div class="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div>
+                <h3 class="text-sm font-bold text-white">Current Month Bill</h3>
+                <span class="text-[11px] text-slate-400" th:text="${currentBill != null ? currentBill.billingCycleMonth : 'Current Cycle'}">Cycle</span>
+              </div>
+              <span th:if="${currentBill != null and currentBill.status.name() == 'PAID'}" class="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                ✓ Fully Paid
+              </span>
+              <span th:unless="${currentBill != null and currentBill.status.name() == 'PAID'}" class="px-2.5 py-1 rounded-full text-xs font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                Pending Due
+              </span>
+            </div>
+
+            <div th:if="${currentBill != null}" class="space-y-2">
+              <div class="flex justify-between text-xs text-slate-300">
+                <span>Base Rent</span>
+                <span class="font-mono font-bold" th:text="'₹' + ${#numbers.formatInteger(currentBill.baseRentInr, 0, 'COMMA')}">₹0</span>
+              </div>
+              <div class="flex justify-between text-xs text-slate-300">
+                <span>Electricity Bill</span>
+                <span class="font-mono font-bold" th:text="'₹' + ${#numbers.formatInteger(currentBill.electricityInr, 0, 'COMMA')}">₹0</span>
+              </div>
+              <div class="flex justify-between text-xs text-slate-300">
+                <span>Maintenance & Water</span>
+                <span class="font-mono font-bold" th:text="'₹' + ${#numbers.formatInteger(currentBill.maintenanceInr + currentBill.waterInr, 0, 'COMMA')}">₹0</span>
+              </div>
+              <div class="pt-3 border-t border-slate-800 flex justify-between items-baseline">
+                <span class="text-xs font-bold text-white">Total Arrears Payable</span>
+                <span class="text-xl font-black text-emerald-400 font-mono" th:text="'₹' + ${#numbers.formatInteger(arrears, 0, 'COMMA')}">₹0</span>
+              </div>
+            </div>
+          </div>
+
+          <div th:if="${arrears > 0 and currentBill != null}" class="pt-3">
+            <button onclick="openUpiModal()" 
+                    class="w-full py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold text-xs rounded-xl shadow-lg shadow-emerald-600/20 transition flex items-center justify-center gap-2">
+              <i data-lucide="qr-code" class="w-4 h-4"></i> Pay Now via UPI QR & Submit Proof
+            </button>
+          </div>
+        </div>
+
+        <!-- Deposit Settlement Ledger -->
+        <div class="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl space-y-4 flex flex-col justify-between">
+          <div class="space-y-3">
+            <div class="flex items-center justify-between pb-2 border-b border-slate-800">
+              <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400">Security Deposit Ledger</h3>
+              <span class="text-[10px] font-mono text-indigo-400 bg-indigo-500/10 border border-indigo-500/20 px-2 py-0.5 rounded-full">Move-Out Audit</span>
+            </div>
+
+            <div class="space-y-2 text-xs">
+              <div class="flex justify-between text-slate-300">
+                <span>Initial Deposit</span>
+                <span class="font-mono font-bold" th:text="'₹' + ${#numbers.formatInteger(contract.securityDeposit, 0, 'COMMA')}">₹0</span>
+              </div>
+              <div class="flex justify-between text-slate-300">
+                <span>Unpaid Rent Arrears</span>
+                <span class="font-mono font-bold text-rose-400" th:text="'-₹' + ${settlement != null ? #numbers.formatInteger(settlement.unpaidRentArrears, 0, 'COMMA') : 0}">-₹0</span>
+              </div>
+              <div class="flex justify-between text-slate-300">
+                <span>Repair Deductions</span>
+                <span class="font-mono font-bold text-rose-400" th:text="'-₹' + ${settlement != null ? #numbers.formatInteger(settlement.totalDeductions, 0, 'COMMA') : 0}">-₹0</span>
+              </div>
+              <div class="pt-3 border-t border-slate-800 flex justify-between items-baseline">
+                <span class="text-xs font-bold text-white">Estimated Net Refund</span>
+                <span class="text-base font-black text-indigo-400 font-mono" 
+                      th:text="'₹' + ${settlement != null ? #numbers.formatInteger(settlement.netRefundableAmount, 0, 'COMMA') : #numbers.formatInteger(contract.securityDeposit, 0, 'COMMA')}">₹0</span>
+              </div>
+            </div>
+          </div>
+
+          <p class="text-[10px] text-slate-500 leading-relaxed">
+            Final refund is credited within 7 days of verified move-out inspection.
+          </p>
+        </div>
+
+        <!-- Property Manager Contact Card -->
+        <div class="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl space-y-4 flex flex-col justify-between">
+          <div>
+            <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">Property Manager</h3>
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-300">
+                <i data-lucide="user-check" class="w-5 h-5"></i>
+              </div>
+              <div>
+                <span class="text-xs font-bold text-white block">Assigned Broker / Owner</span>
+                <span class="text-[11px] text-slate-400 font-mono" th:text="'+' + ${contract.ownerPhone}">+919876543210</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="space-y-2">
+            <a th:href="'https://wa.me/' + ${contract.ownerPhone}" target="_blank"
+               class="w-full py-2.5 bg-emerald-600/10 hover:bg-emerald-600/20 text-emerald-400 border border-emerald-500/20 rounded-xl text-xs font-bold transition flex items-center justify-center gap-2">
+              <i data-lucide="message-square" class="w-3.5 h-3.5"></i> Chat on WhatsApp
+            </a>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Maintenance & Service Ticketing Section -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+        <!-- Create Service Ticket Form -->
+        <div class="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl space-y-4">
+          <div class="flex items-center gap-2">
+            <i data-lucide="wrench" class="w-4 h-4 text-indigo-400"></i>
+            <h3 class="text-xs font-bold uppercase tracking-wider text-white">Raise Service Ticket</h3>
+          </div>
+
+          <form th:action="@{/tenant/portal/tickets}" method="POST" enctype="multipart/form-data" class="space-y-3">
+            <input type="hidden" name="contractId" th:value="${contract.id}" />
+
+            <div>
+              <label class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-1">Issue Category</label>
+              <select name="category" class="w-full px-3.5 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                <option value="PLUMBING">Plumbing / Water Seepage</option>
+                <option value="ELECTRICAL">Electrical / Switchboard / Appliance</option>
+                <option value="CARPENTRY">Doors / Windows / Carpentry</option>
+                <option value="PEST_CONTROL">Pest Control Service</option>
+                <option value="OTHER">General Maintenance</option>
+              </select>
+            </div>
+
+            <div>
+              <input type="text" name="title" placeholder="Summary (e.g. Geyser not heating)" required
+                     class="w-full px-3.5 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
+            </div>
+
+            <div>
+              <textarea name="description" rows="2" placeholder="Provide extra details for the technician..."
+                        class="w-full px-3.5 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 focus:ring-2 focus:ring-indigo-500 focus:outline-none"></textarea>
+            </div>
+
+            <div class="flex items-center justify-between gap-2 pt-1">
+              <label class="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-800 border border-slate-700 text-xs text-slate-400 cursor-pointer hover:border-slate-600 transition truncate">
+                <i data-lucide="camera" class="w-3.5 h-3.5 text-indigo-400 shrink-0"></i>
+                <span id="ticket-photo-label" class="truncate text-[11px]">Upload Photo</span>
+                <input type="file" name="photo" accept="image/*" class="sr-only"
+                       onchange="document.getElementById('ticket-photo-label').innerText = this.files[0] ? this.files[0].name : 'Upload Photo'" />
+              </label>
+              <button type="submit" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl transition flex items-center gap-1.5 shadow-lg shadow-indigo-600/20">
+                <i data-lucide="send" class="w-3.5 h-3.5"></i> Submit Ticket
+              </button>
+            </div>
+          </form>
+        </div>
+
+        <!-- Ticket Activity History -->
+        <div class="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl space-y-4">
+          <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400">Recent Service Requests</h3>
+          
+          <div th:if="${tickets == null or #lists.isEmpty(tickets)}" class="py-12 text-center text-slate-500 text-xs">
+            <i data-lucide="check-circle" class="w-7 h-7 text-emerald-500/40 mx-auto mb-2"></i>
+            No open maintenance requests.
+          </div>
+
+          <div th:unless="${tickets == null or #lists.isEmpty(tickets)}" class="space-y-2.5 max-h-64 overflow-y-auto pr-1">
+            <div th:each="t : ${tickets}" class="p-3 bg-slate-800/60 border border-slate-700/60 rounded-2xl flex items-center justify-between gap-3">
+              <div class="flex items-center gap-2.5">
+                <div class="w-8 h-8 rounded-xl bg-slate-900 flex items-center justify-center shrink-0">
+                  <i data-lucide="wrench" class="w-4 h-4 text-indigo-400"></i>
+                </div>
+                <div>
+                  <h4 class="text-xs font-bold text-white" th:text="${t.title}">Issue</h4>
+                  <span class="text-[10px] text-slate-400 block" th:text="${#temporals.format(t.createdAt, 'dd MMM yyyy')}">Date</span>
+                </div>
+              </div>
+              <span th:text="${t.status}" 
+                    th:classappend="${t.status.name() == 'RESOLVED'} ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-amber-500/10 text-amber-400 border-amber-500/20'"
+                    class="px-2 py-0.5 rounded-full text-[10px] font-bold border">
+                OPEN
+              </span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Past Invoices Ledger -->
+      <div class="bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-xl space-y-4">
+        <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400">Payment History</h3>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs text-slate-300">
+            <thead class="text-[11px] uppercase tracking-wider text-slate-500 border-b border-slate-800">
+              <tr>
+                <th class="py-3 px-2">Cycle</th>
+                <th class="py-3 px-2">Total Due</th>
+                <th class="py-3 px-2">Amount Paid</th>
+                <th class="py-3 px-2">Status</th>
+                <th class="py-3 px-2">Payment Ref</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-800/60 font-mono">
+              <tr th:each="bill : ${history}">
+                <td class="py-3 px-2 text-white font-semibold font-sans" th:text="${bill.billingCycleMonth}">Month</td>
+                <td class="py-3 px-2" th:text="'₹' + ${#numbers.formatInteger(bill.totalDueInr, 0, 'COMMA')}">₹0</td>
+                <td class="py-3 px-2 text-emerald-400" th:text="'₹' + ${#numbers.formatInteger(bill.paidAmountInr, 0, 'COMMA')}">₹0</td>
+                <td class="py-3 px-2">
+                  <span th:text="${bill.status}" class="text-[10px] px-2 py-0.5 rounded-full font-bold bg-slate-800 text-slate-300">STATUS</span>
+                </td>
+                <td class="py-3 px-2 text-slate-500 text-[11px]" th:text="${bill.transactionReference != null ? bill.transactionReference : '—'}">—</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- Interactive UPI Payment & Proof Submission Modal -->
+  <div id="upiModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-3xl p-6 max-w-md w-full text-center space-y-4 shadow-2xl relative">
+      <button onclick="closeUpiModal()" class="absolute top-4 right-4 text-slate-400 hover:text-white">
+        <i data-lucide="x" class="w-5 h-5"></i>
+      </button>
+
+      <div class="pb-2 border-b border-slate-800 text-left">
+        <h3 class="text-sm font-bold text-white">Scan & Pay via UPI</h3>
+        <p class="text-[11px] text-slate-400">Scan QR code with any UPI app, then submit payment proof below.</p>
+      </div>
+      
+      <!-- Dynamic QR Code -->
+      <div class="p-3 bg-white rounded-2xl inline-block shadow-md">
+        <img th:if="${upiUrl != null and !#strings.isEmpty(upiUrl)}" 
+             th:src="'https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=' + ${upiUrl}" 
+             alt="UPI QR Code" class="w-40 h-40 mx-auto" />
+      </div>
+
+      <div>
+        <span class="text-xs text-slate-400 block">Total Payable Amount</span>
+        <span class="text-2xl font-black text-emerald-400 font-mono" th:text="'₹' + ${arrears != null ? #numbers.formatInteger(arrears, 0, 'COMMA') : 0}">₹0</span>
+      </div>
+
+      <!-- Interactive Proof Submission Form -->
+      <form th:if="${currentBill != null}" th:action="@{'/tenancy/rents/' + ${currentBill.id} + '/submit-proof'}" method="POST" enctype="multipart/form-data" class="space-y-3 pt-2 text-left border-t border-slate-800">
+        <div>
+          <label class="block text-[10px] font-bold uppercase text-slate-400 mb-1">Transaction Ref / UTR *</label>
+          <input type="text" name="transactionReference" placeholder="e.g. UPI/20260905/982341" required 
+                 class="w-full px-3.5 py-2.5 bg-slate-800 border border-slate-700 rounded-xl text-xs text-white focus:ring-2 focus:ring-indigo-500 focus:outline-none" />
+        </div>
+
+        <div>
+          <label class="block text-[10px] font-bold uppercase text-slate-400 mb-1">Upload Payment Screenshot *</label>
+          <label class="flex items-center gap-2 px-3.5 py-2.5 rounded-xl bg-slate-800 border border-slate-700 text-xs text-slate-400 cursor-pointer hover:border-slate-600 transition truncate">
+            <i data-lucide="image" class="w-4 h-4 text-indigo-400 shrink-0"></i>
+            <span id="proof-file-label" class="truncate">Select receipt screenshot</span>
+            <input type="file" name="receiptPhoto" accept="image/*" required class="sr-only" 
+                   onchange="document.getElementById('proof-file-label').innerText = this.files[0] ? this.files[0].name : 'Select receipt screenshot'" />
+          </label>
+        </div>
+
+        <button type="submit" class="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl shadow-lg shadow-indigo-600/20 transition flex items-center justify-center gap-2">
+          <i data-lucide="check-circle" class="w-4 h-4"></i> Submit Payment for Verification
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <footer class="border-t border-slate-800/80 py-6 text-center text-xs text-slate-500">
+    <p>Property Hub — Digital Home Ledger</p>
+  </footer>
+
+  <script>
+    function openUpiModal() {
+      document.getElementById('upiModal').classList.remove('hidden');
+      document.getElementById('upiModal').classList.add('flex');
+    }
+
+    function closeUpiModal() {
+      document.getElementById('upiModal').classList.add('hidden');
+      document.getElementById('upiModal').classList.remove('flex');
+    }
+
+    // Close modal on background click
+    document.getElementById('upiModal').addEventListener('click', (e) => {
+      if (e.target.id === 'upiModal') closeUpiModal();
+    });
+
+    document.addEventListener('DOMContentLoaded', () => {
+      lucide.createIcons();
+    });
+  </script>
+</body>
+</html>

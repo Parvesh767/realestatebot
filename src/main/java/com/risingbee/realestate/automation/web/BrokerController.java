@@ -1,26 +1,36 @@
 package com.risingbee.realestate.automation.web;
 
+import org.springframework.stereotype.Controller;
+import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
 
-import com.risingbee.realestate.auth.dto.BrokerResponse;
 import com.risingbee.realestate.automation.actor.Actor;
 import com.risingbee.realestate.automation.actor.ActorContext;
 import com.risingbee.realestate.automation.service.BrokerService;
 
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 
-@RestController
-@RequestMapping("/api/broker")
+@Controller
+//@RequestMapping("/api/broker")
 @RequiredArgsConstructor
 public class BrokerController {
 
     private final BrokerService brokerService;
 
-    @GetMapping("/me")
-    public BrokerResponse me() {
+//    @GetMapping("/me")
+//    public BrokerResponse me() {
+//        Actor actor = ActorContext.get();
+//        return brokerService.getMyProfile(actor);
+//    }
+    
+    
+    @GetMapping("/admin/profile")
+    public String showProfilePage(Model model, HttpServletRequest request) {
         Actor actor = ActorContext.get();
-        return brokerService.getMyProfile(actor);
+        if (actor == null) {
+            return "redirect:/web/auth/login";
+        }
+        return "admin/profile";
     }
 }

@@ -3,6 +3,7 @@ package com.risingbee.realestate.automation.service;
 import java.net.URI;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Optional;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -11,7 +12,6 @@ import org.springframework.web.multipart.MultipartFile;
 import com.risingbee.realestate.auth.AuthorizationService;
 import com.risingbee.realestate.automation.actor.Actor;
 import com.risingbee.realestate.automation.actor.enums.Capability;
-import com.risingbee.realestate.automation.domain.BrokerConversation;
 import com.risingbee.realestate.automation.domain.Property;
 import com.risingbee.realestate.automation.dto.PropertyRequestDTO;
 import com.risingbee.realestate.automation.dto.PropertyResponseDTO;
@@ -37,154 +37,38 @@ public class PropertyService {
     private final LocationResolver locationResolver;
     private final AuthorizationService authz;
 
-    /* =========================
-       CREATE (REST / API)
-       ========================= */
+    /* =========================        LOOKUP        ========================= */
 
-    public PropertyResponseDTO create(
-            Actor actor,
-            PropertyRequestDTO dto,
-            List<MultipartFile> photos
-    ) {
-        authz.require(actor, Capability.ADD_PROPERTY);
-        
-        Long ownerAccountId = actor.internalId();
-        if (ownerAccountId == null) {
-            throw new IllegalStateException("Actor has no account identity");
+    @Transactional(readOnly = true)
+    public Optional<Property> findById(Long id) {
+        if (id == null) {
+            return Optional.empty();
         }
-
-        ResolvedLocation rl = locationResolver
-                .resolveText(tokenizeArea(dto.getArea()))
-                .orElse(null);
-
-        Property property = PropertyMapper.toEntity(dto, ownerAccountId);
-
-        if (rl != null) {
-            property.updateLocation(rl.city(), rl.locality());
-        }
-
-        if (photos != null && !photos.isEmpty()) {
-            property.addPhotos(photoStorageService.saveAll(photos));
-        }
-
-        repository.save(property);
-        return PropertyMapper.toDTO(property);
+        return repository.findById(id);
     }
 
-    /* =========================
-       UPDATE
-       ========================= */
-
-    public PropertyResponseDTO update(
-            Actor actor,
-            Long id,
-            PropertyRequestDTO dto,
-            List<MultipartFile> newPhotos,
-            List<String> removePhotos
-    ) {
-        authz.require(actor, Capability.ADD_PROPERTY);
-        
-        Long ownerAccountId = actor.internalId();
-        if (ownerAccountId == null) {
-            throw new IllegalStateException("Actor has no account identity");
-        }
-        
-        Property property = loadOwnedProperty(actor, id);
-
-        property.updateDetails(
-                dto.getTitle(),
-                dto.getPrice() != null ? dto.getPrice().longValue() : null,
-                dto.getDescription(),
-                dto.getMapLink()
-        );
-
-        if (dto.getArea() != null) {
-            ResolvedLocation rl = locationResolver
-                    .resolveText(tokenizeArea(dto.getArea()))
-                    .orElse(null);
-
-            if (rl != null) {
-                property.updateLocation(rl.city(), rl.locality());
-            }
-        }
-
-        if (removePhotos != null && !removePhotos.isEmpty()) {
-            List<String> normalizedPaths = removePhotos.stream().map(this::normalizePath).toList();
-            normalizedPaths.forEach(photoStorageService::delete);
-            property.removePhotos(normalizedPaths);
-        }
-
-        if (newPhotos != null && !newPhotos.isEmpty()) {
-            property.addPhotos(photoStorageService.saveAll(newPhotos));
-        }
-
-        repository.save(property);
-        return PropertyMapper.toDTO(property);
-    }
-
-    /* =========================
-       CREATE (WhatsApp flow)
-       ========================= */
-
-    @SuppressWarnings("unchecked")
-    public Property createFromConversation(
-            Actor actor,
-            BrokerConversation conv
-    ) {
-        authz.require(actor, Capability.ADD_PROPERTY);
-
-        Long ownerAccountId = actor.internalId();
-        if (ownerAccountId == null) {
-            throw new IllegalStateException("Actor has no account identity");
-        }
-
-        ResolvedLocation rl = locationResolver
-            .resolveText(tokenizeArea(conv.get("area", String.class)))
-            .orElse(null);
-
-        Integer priceVal = conv.get("price", Integer.class);
-
-        Property property = new Property(
-            ownerAccountId,
-            buildTitle(conv, rl),
-            conv.get("bhk", String.class),
-            priceVal != null ? priceVal.longValue() : null,
-            rl != null ? rl.city() : null,
-            rl != null ? rl.locality() : null
-        );
-
-        List<String> photos = conv.get("photos", List.class);
-        if (photos != null) {
-            property.addPhotos(photos);
-        }
-
-        repository.save(property);
-        return property;
-    }
-
-    /* =========================
-       READ
-       ========================= */
-
+    @Transactional(readOnly = true)
     public PropertyResponseDTO get(Actor actor, Long id) {
         return PropertyMapper.toDTO(loadOwnedProperty(actor, id));
     }
 
+    @Transactional(readOnly = true)
     public List<PropertyResponseDTO> getAllForActor(Actor actor) {
         authz.require(actor, Capability.ADD_PROPERTY);
-
         Long accountId = actor.internalId();
         if (accountId == null) {
             throw new IllegalStateException("Actor has no account identity");
         }
-
-        return repository
-            .findByOwnerAccountId(accountId)
-            .stream()
-            .map(PropertyMapper::toDTO)
-            .toList();
+        return repository.findByOwnerAccountIdOrderByCreatedAtDesc(accountId)
+                .stream()
+                .map(PropertyMapper::toDTO)
+                .toList();
     }
 
+    /**
+     * Used by SearcherSearchHandler for WhatsApp matching
+     */
+    @Transactional(readOnly = true)
     public List<Property> findMatchesForSearchers(
             String bhk,
             String cityCode,
@@ -195,35 +79,107 @@ public class PropertyService {
         return repository.searchPublic(bhk, cityCode, localityCode, min, max);
     }
 
-    /* =========================
-       DELETE (soft)
-       ========================= */
+    /* =========================        CREATE        ========================= */
+
+    public PropertyResponseDTO create(
+            Actor actor,
+            PropertyRequestDTO dto,
+            List<MultipartFile> photos
+    ) {
+        authz.require(actor, Capability.ADD_PROPERTY);
+        Long ownerAccountId = actor.internalId();
+        if (ownerAccountId == null) {
+            throw new IllegalStateException("Actor has no account identity");
+        }
+
+        ResolvedLocation rl = locationResolver
+                .resolveText(tokenizeArea(dto.getArea()))
+                .orElse(null);
+
+        // Populate location codes if resolved
+        if (rl != null) {
+            dto.setCityCode(rl.city());
+            dto.setLocalityCode(rl.locality());
+        }
+
+        Property property = PropertyMapper.toEntity(dto, ownerAccountId);
+
+        // Upload and bind multipart photos if provided
+        if (photos != null && !photos.isEmpty()) {
+            property.addPhotos(photoStorageService.saveAll(photos));
+        }
+
+        repository.save(property);
+        log.info("Created property #{} for ownerAccountId={}", property.getId(), ownerAccountId);
+        return PropertyMapper.toDTO(property);
+    }
+
+    /* =========================        UPDATE        ========================= */
+
+    public PropertyResponseDTO update(
+            Actor actor,
+            Long id,
+            PropertyRequestDTO dto,
+            List<MultipartFile> newPhotos,
+            List<String> removePhotos
+    ) {
+        authz.require(actor, Capability.ADD_PROPERTY);
+        Property property = loadOwnedProperty(actor, id);
+
+        // Re-resolve location if area text was updated
+        if (dto.getArea() != null && !dto.getArea().isBlank()) {
+            ResolvedLocation rl = locationResolver.resolveText(tokenizeArea(dto.getArea())).orElse(null);
+            if (rl != null) {
+                dto.setCityCode(rl.city());
+                dto.setLocalityCode(rl.locality());
+            }
+        }
+
+        PropertyMapper.updateEntity(property, dto);
+
+        // Process photo removals
+        if (removePhotos != null && !removePhotos.isEmpty()) {
+            List<String> normalizedPaths = removePhotos.stream()
+                    .map(this::normalizePath)
+                    .toList();
+            normalizedPaths.forEach(photoStorageService::delete);
+            property.removePhotos(normalizedPaths);
+        }
+
+        // Process new photo uploads
+        if (newPhotos != null && !newPhotos.isEmpty()) {
+            property.addPhotos(photoStorageService.saveAll(newPhotos));
+        }
+
+        repository.save(property);
+        log.info("Updated property #{} for ownerAccountId={}", property.getId(), actor.internalId());
+        return PropertyMapper.toDTO(property);
+    }
+
+    /* =========================        DELETE        ========================= */
 
     public void delete(Actor actor, Long id) {
         Property property = loadOwnedProperty(actor, id);
         property.deactivate();
         repository.save(property);
+        log.info("Deactivated property #{} for ownerAccountId={}", id, actor.internalId());
     }
 
-    /* =========================
-       INTERNAL HELPERS
-       ========================= */
+    /* =========================        HELPERS        ========================= */
 
     private Property loadOwnedProperty(Actor actor, Long id) {
         authz.require(actor, Capability.ADD_PROPERTY);
-
         Long accountId = actor.internalId();
         if (accountId == null) {
             throw new IllegalStateException("Actor has no account identity");
         }
 
         Property property = repository.findById(id)
-            .orElseThrow(() -> new ResourceNotFoundException("Property not found: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("Property not found: " + id));
 
         if (!property.getOwnerAccountId().equals(accountId)) {
             throw new AccessDeniedException("Property does not belong to actor");
         }
-
         return property;
     }
 
@@ -231,24 +187,15 @@ public class PropertyService {
         if (area == null || area.isBlank()) {
             return List.of();
         }
-
         return Arrays.stream(area.split("\\s+"))
                 .map(String::toLowerCase)
                 .toList();
     }
 
     private String normalizePath(String urlOrPath) {
-        if (urlOrPath.startsWith("http")) {
+        if (urlOrPath != null && urlOrPath.startsWith("http")) {
             return URI.create(urlOrPath).getPath();
         }
         return urlOrPath;
-    }
-
-    private String buildTitle(BrokerConversation conv, ResolvedLocation rl) {
-        String bhk = conv.get("bhk", String.class);
-        if (rl != null && rl.locality() != null) {
-            return bhk + " in " + rl.locality();
-        }
-        return bhk + " Property";
     }
 }

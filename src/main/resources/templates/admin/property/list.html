@@ -1,208 +1,839 @@
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org">
+
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Properties - Property Admin</title>
-    <!-- Tailwind CSS CDN -->
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>My Properties — Broker Portal</title>
+	<script src="https://cdn.tailwindcss.com"></script>
+	<script src="https://unpkg.com/lucide@latest"></script>
 </head>
-<body class="bg-slate-50 font-sans text-slate-800 antialiased min-h-screen">
 
-    <!-- Top Navigation Bar -->
-    <nav class="bg-slate-900 text-white shadow-md">
-        <div class="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-            <div class="flex items-center space-x-3">
-                <i class="fa-solid fa-building-user text-indigo-400 text-xl"></i>
-                <span class="font-bold text-lg tracking-wide">Property Admin</span>
-            </div>
-            <div class="flex items-center space-x-4">
-                <span class="text-xs bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 px-3 py-1 rounded-full font-medium">
-                    <i class="fa-solid fa-circle text-[8px] text-emerald-400 me-1.5"></i>Admin Console
-                </span>
-            </div>
-        </div>
-    </nav>
+<body
+	class="bg-slate-950 text-slate-100 min-h-screen antialiased flex flex-col justify-between selection:bg-indigo-500 selection:text-white">
 
-    <!-- Main Content Container -->
-    <main class="max-w-7xl mx-auto my-10 px-6">
-        
-        <!-- Header & Top Actions -->
-        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
-            <div>
-                <h1 class="text-3xl font-bold text-slate-900">Properties</h1>
-                <p class="text-slate-500 text-sm mt-1">Manage and update your property listings in one place.</p>
-            </div>
-            <a th:href="@{/admin/properties/new}" 
-               class="inline-flex items-center justify-center px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-sm shadow-lg shadow-indigo-200 transition-all group">
-                <i class="fa-solid fa-plus me-2 group-hover:rotate-90 transition-transform duration-200"></i>Add New Property
-            </a>
-        </div>
+	<!-- Include Common Navbar Fragment -->
+	<div th:replace="~{fragments/header :: navbar}"></div>
 
-        <!-- Metric Cards Grid -->
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-8">
-            <!-- Total Properties -->
-            <div class="bg-white p-6 rounded-2xl border border-slate-100 shadow-xl/5 flex items-center justify-between">
-                <div>
-                    <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Listings</p>
-                    <h3 class="text-3xl font-bold text-slate-900 mt-1" th:text="${#lists.size(properties)}">0</h3>
-                </div>
-                <div class="w-12 h-12 bg-indigo-50 rounded-xl flex items-center justify-center text-indigo-600">
-                    <i class="fa-solid fa-building text-xl"></i>
-                </div>
-            </div>
+	<!-- Workspace Container -->
+	<main class="max-w-7xl mx-auto px-6 py-8 w-full space-y-8">
 
-            <!-- Active Status Metric Card -->
-            <div class="bg-white p-6 rounded-2xl border border-slate-100 shadow-xl/5 flex items-center justify-between">
-                <div>
-                    <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Status</p>
-                    <h3 class="text-3xl font-bold text-emerald-600 mt-1">Active</h3>
-                </div>
-                <div class="w-12 h-12 bg-emerald-50 rounded-xl flex items-center justify-center text-emerald-600">
-                    <i class="fa-solid fa-square-check text-xl"></i>
-                </div>
-            </div>
+		<!-- Top Action & Title Banner -->
+		<div
+			class="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 bg-gradient-to-r from-slate-900 via-indigo-950/40 to-slate-900 border border-slate-800 p-6 rounded-3xl">
+			<div>
+				<h2 class="text-xl font-bold text-white">Property Inventory & Floor Operations</h2>
+				<p class="text-xs text-slate-400 mt-1">Manage parent buildings, multi-floor unit matrices, occupancy,
+					and tenancy contracts.</p>
+			</div>
 
-            <!-- Quick Info Metric Card -->
-            <div class="bg-white p-6 rounded-2xl border border-slate-100 shadow-xl/5 flex items-center justify-between">
-                <div>
-                    <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Overview</p>
-                    <h3 class="text-sm font-semibold text-slate-700 mt-2">Up to date</h3>
-                </div>
-                <div class="w-12 h-12 bg-blue-50 rounded-xl flex items-center justify-center text-blue-600">
-                    <i class="fa-solid fa-chart-line text-xl"></i>
-                </div>
-            </div>
-        </div>
+			<!-- Inside the Top Action & Title Banner -->
+			<div class="flex items-center gap-3">
+			    <!-- NEW: Bulk Upload Trigger -->
+			    <button onclick="openBatchModal()" class="inline-flex items-center gap-2 px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-semibold border border-slate-700 transition">
+			        <i data-lucide="upload-cloud" class="w-4 h-4 text-emerald-400"></i>
+			        Bulk Import
+			    </button>
 
-        <!-- Table Container -->
-        <div class="bg-white rounded-2xl shadow-xl border border-slate-100 overflow-hidden">
-            
-            <!-- Table Header Toolbar / Quick Filter -->
-            <div class="p-5 border-b border-slate-100 bg-slate-50/50 flex flex-col sm:flex-row items-center justify-between gap-4">
-                <div class="relative w-full sm:w-72">
-                    <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
-                    <input type="text" 
-                           id="tableSearch" 
-                           onkeyup="filterProperties()" 
-                           placeholder="Search properties..." 
-                           class="w-full pl-10 pr-4 py-2 text-sm bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all" />
-                </div>
-                <div class="text-xs text-slate-400">
-                    Showing all listings
-                </div>
-            </div>
+			    <a th:href="@{/admin/properties/new}"
+			        class="inline-flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold shadow-lg shadow-indigo-600/20 transition">
+			        <i data-lucide="plus" class="w-4 h-4"></i>
+			        Add New Property
+			    </a>
+			</div>
+		</div>
 
-            <!-- Responsive Table Wrapper -->
-            <div class="overflow-x-auto">
-                <table class="w-full text-left border-collapse" id="propertiesTable">
-                    <thead>
-                        <tr class="bg-slate-50/80 text-slate-500 uppercase text-[11px] font-bold tracking-wider border-b border-slate-100">
-                            <th class="py-4 px-6">Property Title</th>
-                            <th class="py-4 px-6">Price</th>
-                            <th class="py-4 px-6">BHK</th>
-                            <th class="py-4 px-6">Location / Area</th>
-                            <th class="py-4 px-6 text-right">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-slate-100 text-sm text-slate-700">
-                        
-                        <!-- Empty State -->
-                        <tr th:if="${#lists.isEmpty(properties)}" id="emptyRow">
-                            <td colspan="5" class="py-12 text-center text-slate-400">
-                                <div class="max-w-xs mx-auto space-y-3">
-                                    <i class="fa-solid fa-city text-4xl text-slate-300"></i>
-                                    <p class="font-medium text-slate-600">No properties yet</p>
-                                    <p class="text-xs">Add your first property listing to get started 🚀</p>
-                                    <a th:href="@{/admin/properties/new}" class="inline-block mt-2 text-xs font-semibold text-indigo-600 hover:text-indigo-800">
-                                        + Add Property Now
-                                    </a>
-                                </div>
-                            </td>
-                        </tr>
+		<!-- Operational Metrics Grid -->
+		<div class="grid grid-cols-1 sm:grid-cols-4 gap-4">
+			<div class="p-5 rounded-2xl bg-slate-900/60 border border-slate-800 flex items-center justify-between">
+				<div>
+					<span class="text-slate-400 text-xs font-medium uppercase tracking-wider block mb-1">Total
+						Portfolio</span>
+					<span class="text-2xl font-bold text-white" th:text="${#lists.size(properties)}">0</span>
+				</div>
+				<div class="w-10 h-10 rounded-xl bg-indigo-500/10 text-indigo-400 flex items-center justify-center">
+					<i data-lucide="building" class="w-5 h-5"></i>
+				</div>
+			</div>
 
-                        <!-- Property Row Item -->
-                        <tr th:each="p : ${properties}" class="hover:bg-indigo-50/30 transition-colors group">
-                            
-                            <!-- Title -->
-                            <td class="py-4 px-6 font-semibold text-slate-900 group-hover:text-indigo-600 transition-colors">
-                                <div class="flex items-center space-x-3">
-                                    <div class="w-8 h-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center text-xs font-bold shrink-0">
-                                        <i class="fa-solid fa-house"></i>
-                                    </div>
-                                    <span th:text="${p.title}">Modern Apartment</span>
-                                </div>
-                            </td>
+			<div class="p-5 rounded-2xl bg-slate-900/60 border border-slate-800 flex items-center justify-between">
+				<div>
+					<span class="text-slate-400 text-xs font-medium uppercase tracking-wider block mb-1">Active
+						Listings</span>
+					<span class="text-2xl font-bold text-emerald-400" id="stat-active-count">0</span>
+				</div>
+				<div class="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center">
+					<i data-lucide="radio" class="w-5 h-5"></i>
+				</div>
+			</div>
 
-                            <!-- Price -->
-                            <td class="py-4 px-6 font-medium text-slate-900">
-                                <span class="bg-emerald-50 text-emerald-700 px-2.5 py-1 rounded-lg text-xs font-semibold border border-emerald-200/50">
-                                    ₹ <span th:text="${#numbers.formatInteger(p.price, 0, 'COMMA')}">0</span>
-                                </span>
-                            </td>
+			<div class="p-5 rounded-2xl bg-slate-900/60 border border-slate-800 flex items-center justify-between">
+				<div>
+					<span class="text-slate-400 text-xs font-medium uppercase tracking-wider block mb-1">Occupancy
+						Ratio</span>
+					<div class="text-2xl font-bold text-white">
+						<span class="text-indigo-400" th:text="${rentedCount != null ? rentedCount : 0}">0</span>
+						<span class="text-xs text-slate-500 font-normal">/ <span
+								th:text="${#lists.size(properties)}">0</span> Units</span>
+					</div>
+				</div>
+				<div class="w-10 h-10 rounded-xl bg-indigo-500/10 text-indigo-400 flex items-center justify-center">
+					<i data-lucide="key-round" class="w-5 h-5"></i>
+				</div>
+			</div>
 
-                            <!-- BHK Badge -->
-                            <td class="py-4 px-6">
-                                <span class="bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-lg text-xs font-semibold border border-indigo-100">
-                                    <span th:text="${p.bhk}">2</span> BHK
-                                </span>
-                            </td>
+			<div class="p-5 rounded-2xl bg-slate-900/60 border border-slate-800 flex items-center justify-between">
+				<div>
+					<span class="text-slate-400 text-xs font-medium uppercase tracking-wider block mb-1">Portfolio Rent
+						Roll</span>
+					<div class="text-2xl font-bold font-mono text-emerald-400">
+						₹ <span id="stat-total-rent">0</span>
+					</div>
+				</div>
+				<div class="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center">
+					<i data-lucide="badge-dollar-sign" class="w-5 h-5"></i>
+				</div>
+			</div>
+		</div>
 
-                            <!-- Location -->
-                            <td class="py-4 px-6 text-slate-500">
-                                <i class="fa-solid fa-location-dot text-slate-400 me-1"></i>
-                                <span th:text="${p.displayLocation != null ? p.displayLocation : 'N/A'}">City Center</span>
-                            </td>
+		<!-- Listings Table Container -->
+		<div class="bg-slate-900/60 border border-slate-800 rounded-3xl p-6 space-y-4">
 
-                            <!-- Actions Buttons -->
-                            <td class="py-4 px-6 text-right space-x-2">
-                                <!-- Edit Button -->
-                                <a th:href="@{'/admin/properties/edit/' + ${p.id}}" 
-                                   class="inline-flex items-center px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium rounded-lg transition-all border border-slate-200">
-                                    <i class="fa-solid fa-pen-to-square me-1.5 text-slate-500"></i>Edit
-                                </a>
+			<!-- Table Controls & Filter Tabs -->
+			<div
+				class="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 pb-4 border-b border-slate-800">
 
-                                <!-- Delete Button -->
-                                <a th:href="@{'/admin/properties/delete/' + ${p.id}}" 
-                                   onclick="return confirm('Are you sure you want to delete this property?');"
-                                   class="inline-flex items-center px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 text-xs font-medium rounded-lg transition-all border border-red-200/60">
-                                    <i class="fa-solid fa-trash me-1.5"></i>Delete
-                                </a>
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </main>
+				<!-- Filter Tabs -->
+				<!-- Table Controls & Filter Tabs -->
+				<div
+					class="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4 pb-4 border-b border-slate-800">
 
-    <!-- Client-side Table Filter Utility -->
-    <script>
-        function filterProperties() {
-            const input = document.getElementById('tableSearch');
-            const filter = input.value.toLowerCase();
-            const table = document.getElementById('propertiesTable');
-            const trs = table.getElementsByTagName('tr');
+					<!-- Dual Filter Controls -->
+					<div class="flex flex-col sm:flex-row gap-3 self-start">
 
-            for (let i = 1; i < trs.length; i++) {
-                if (trs[i].id === 'emptyRow') continue;
-                
-                const titleTd = trs[i].getElementsByTagName('td')[0];
-                const locationTd = trs[i].getElementsByTagName('td')[3];
+						<!-- Status Filter -->
+						<div
+							class="flex items-center gap-1 bg-slate-800/80 p-1 rounded-xl border border-slate-700 text-xs">
+							<button onclick="setStatusFilter('ALL')" id="filter-status-all"
+								class="px-3 py-1 rounded-lg font-semibold bg-indigo-600 text-white transition">All
+								Status</button>
+							<button onclick="setStatusFilter('ACTIVE')" id="filter-status-active"
+								class="px-3 py-1 rounded-lg font-semibold text-slate-400 hover:text-white transition">Live</button>
+							<button onclick="setStatusFilter('INACTIVE')" id="filter-status-inactive"
+								class="px-3 py-1 rounded-lg font-semibold text-slate-400 hover:text-white transition">Draft</button>
+						</div>
 
-                if (titleTd || locationTd) {
-                    const titleText = titleTd ? titleTd.textContent || titleTd.innerText : '';
-                    const locationText = locationTd ? locationTd.textContent || locationTd.innerText : '';
+						<!-- Property Type Filter -->
+						<div
+							class="flex items-center gap-1 bg-slate-800/80 p-1 rounded-xl border border-slate-700 text-xs">
+							<button onclick="setTypeFilter('ALL')" id="filter-type-all"
+								class="px-3 py-1 rounded-lg font-semibold bg-emerald-600 text-white transition">All
+								Types</button>
+							<button onclick="setTypeFilter('STANDALONE')" id="filter-type-standalone"
+								class="px-3 py-1 rounded-lg font-semibold text-slate-400 hover:text-white transition">Standalone</button>
+							<button onclick="setTypeFilter('MULTI')" id="filter-type-multi"
+								class="px-3 py-1 rounded-lg font-semibold text-slate-400 hover:text-white transition">Buildings
+								/ Matrices</button>
+						</div>
 
-                    if (titleText.toLowerCase().indexOf(filter) > -1 || locationText.toLowerCase().indexOf(filter) > -1) {
-                        trs[i].style.display = '';
-                    } else {
-                        trs[i].style.display = 'none';
-                    }
-                }
-            }
-        }
-    </script>
+					</div>
+
+
+				</div>
+
+				<!-- Inline Search -->
+				<div class="flex items-center gap-3">
+					<div class="relative w-full sm:w-72">
+						<i data-lucide="search"
+							class="w-4 h-4 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2"></i>
+						<input type="text" id="tableSearch" onkeyup="filterProperties()"
+							placeholder="Search title, floor, or locality..."
+							class="w-full pl-10 pr-4 py-2 text-xs bg-slate-800/80 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition" />
+					</div>
+
+					<div class="flex items-center gap-1.5 text-xs text-slate-400 shrink-0">
+						<span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+						<span th:text="${#lists.size(properties)} + ' Total Records'">0 Records</span>
+					</div>
+				</div>
+			</div>
+
+			<!-- Responsive Table -->
+			<div class="overflow-x-auto">
+				<table class="w-full text-left border-collapse text-xs" id="propertiesTable">
+					<thead>
+						<tr
+							class="text-slate-400 uppercase text-[10px] font-bold tracking-wider border-b border-slate-800">
+							<th class="py-3.5 px-4">Property / Floor Level</th>
+							<th class="py-3.5 px-4">Rent / Deposit</th>
+							<th class="py-3.5 px-4">Configuration</th>
+							<th class="py-3.5 px-4">Location</th>
+							<th class="py-3.5 px-4">Live Status</th>
+							<th class="py-3.5 px-4 text-right">Actions</th>
+						</tr>
+					</thead>
+					<tbody class="divide-y divide-slate-800/80 text-slate-300">
+
+						<!-- Empty State -->
+						<tr th:if="${#lists.isEmpty(properties)}" id="emptyRow">
+							<td colspan="6" class="py-12 text-center text-slate-500">
+								<div class="max-w-xs mx-auto space-y-3">
+									<div
+										class="w-12 h-12 rounded-2xl bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 flex items-center justify-center mx-auto">
+										<i data-lucide="home" class="w-6 h-6"></i>
+									</div>
+									<p class="font-semibold text-white">No properties listed yet</p>
+									<p class="text-[11px] text-slate-400">Add your first rental property or build a
+										multi-floor unit matrix.</p>
+									<a th:href="@{/admin/properties/new}"
+										class="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-semibold transition text-xs">
+										<i data-lucide="plus" class="w-3.5 h-3.5"></i> Add Listing
+									</a>
+								</div>
+							</td>
+						</tr>
+
+						<!-- Listing Rows -->
+
+						<!-- Listing Rows -->
+						<tr th:each="p : ${properties}" class="hover:bg-slate-800/40 transition property-row"
+							th:data-active="${p.active}" th:data-price="${p.price != null ? p.price : 0}"
+							th:data-multi="${multiUnitPropertyIds != null and multiUnitPropertyIds.contains(p.id)}">
+
+							<!-- Title, Thumbnail & Floor Level -->
+							<td class="py-4 px-4 font-semibold text-white">
+								<div class="flex items-center gap-3">
+									<div
+										class="w-11 h-11 rounded-xl bg-slate-800 border border-slate-700 overflow-hidden shrink-0 flex items-center justify-center">
+										<img th:if="${p.photos != null and !p.photos.empty}" th:src="${p.photos[0]}"
+											class="w-full h-full object-cover" onerror="this.style.display='none'" />
+										<i th:if="${p.photos == null or p.photos.empty}" data-lucide="image"
+											class="w-4 h-4 text-slate-500"></i>
+									</div>
+									<div>
+										<a th:href="@{'/properties/' + ${p.id}}" target="_blank"
+											class="hover:text-indigo-400 transition font-bold line-clamp-1 text-xs"
+											th:text="${p.title}">Luxury 2BHK Apartment</a>
+
+										<div class="flex items-center gap-2 mt-0.5 flex-wrap">
+											<span class="text-[10px] text-slate-500 font-mono"
+												th:text="'#' + ${p.id}">#1</span>
+
+											<!-- Floor Tag Badge -->
+											<span th:if="${p.floorNumber != null and !#strings.isEmpty(p.floorNumber)}"
+												class="text-[10px] font-bold text-amber-400 bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.2 rounded"
+												th:text="${p.floorNumber}">Ground Floor</span>
+
+											<button type="button" th:data-url="@{'/properties/' + ${p.id}}"
+												onclick="copyListingUrl(this)"
+												class="text-[10px] text-indigo-400 hover:text-indigo-300 inline-flex items-center gap-1">
+												<i data-lucide="link" class="w-2.5 h-2.5"></i> Copy Link
+											</button>
+										</div>
+									</div>
+								</div>
+							</td>
+
+							<!-- Rent & Deposit -->
+							<td class="py-4 px-4">
+								<div class="font-mono font-bold text-emerald-400 text-xs">
+									₹ <span
+										th:text="${p.price != null ? #numbers.formatInteger(p.price, 0, 'COMMA') : '0'}">0</span><span
+										class="text-[10px] text-slate-500 font-normal">/mo</span>
+								</div>
+								<span class="text-[10px] text-slate-500 block font-mono"
+									th:if="${p.securityDeposit != null}">
+									Dep: ₹<span
+										th:text="${#numbers.formatInteger(p.securityDeposit, 0, 'COMMA')}">0</span>
+								</span>
+							</td>
+
+							<!-- BHK & Furnishing -->
+							<td class="py-4 px-4">
+								<div class="flex items-center gap-1.5">
+									<span
+										class="bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 px-2 py-0.5 rounded-lg text-[10px] font-bold"
+										th:text="${p.bhk}">2 BHK</span>
+									<span
+										class="bg-slate-800 text-slate-400 border border-slate-700 px-2 py-0.5 rounded-lg text-[10px]"
+										th:text="${p.furnishing != null ? p.furnishing : 'Semi-Furnished'}">Semi-Furnished</span>
+								</div>
+							</td>
+
+							<!-- Location -->
+							<td class="py-4 px-4 text-slate-400">
+								<div class="flex items-center gap-1">
+									<i data-lucide="map-pin" class="w-3.5 h-3.5 text-indigo-400 shrink-0"></i>
+									<span
+										th:text="${(p.localityCode != null ? p.localityCode : '') + (p.cityCode != null ? ', ' + p.cityCode : '')}">Sector
+										49, Gurgaon</span>
+								</div>
+							</td>
+
+							<!-- Live Status & Quick Toggle -->
+							<td class="py-4 px-4 space-y-1.5">
+								<div>
+									<form th:action="@{'/admin/properties/' + ${p.id} + '/toggle-active'}" method="POST"
+										class="inline">
+										<button type="submit"
+											th:class="${p.active ? 'inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 transition cursor-pointer' : 'inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-semibold bg-slate-800 text-slate-400 border border-slate-700 hover:bg-slate-700 transition cursor-pointer'}"
+											title="Click to toggle status">
+											<span
+												th:class="${p.active ? 'w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse' : 'w-1.5 h-1.5 rounded-full bg-slate-500'}"></span>
+											<span
+												th:text="${p.active ? 'Active (Live)' : 'Draft (Paused)'}">Active</span>
+										</button>
+									</form>
+								</div>
+
+								<div>
+									<span th:if="${rentedPropertyIds != null and rentedPropertyIds.contains(p.id)}"
+										class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+										<i data-lucide="key" class="w-2.5 h-2.5"></i> Rented Out
+									</span>
+									<span th:unless="${rentedPropertyIds != null and rentedPropertyIds.contains(p.id)}"
+										class="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-800 text-slate-400 border border-slate-700">
+										Vacant
+									</span>
+								</div>
+							</td>
+
+							<!-- Actions -->
+							<td class="py-4 px-4 text-right">
+								<div class="inline-flex items-center gap-1.5 justify-end">
+
+									<!-- Duplicate / Clone for Another Floor -->
+									<form th:action="@{'/admin/properties/' + ${p.id} + '/duplicate'}" method="POST"
+										class="inline">
+										<button type="submit"
+											class="p-2 rounded-xl bg-slate-800 hover:bg-indigo-600/20 text-slate-400 hover:text-indigo-400 border border-slate-700 transition"
+											title="Clone Listing for Another Floor">
+											<i data-lucide="copy" class="w-3.5 h-3.5"></i>
+										</button>
+									</form>
+
+
+									<!-- Inside the property title cell or action column in properties.html -->
+									<div class="mt-1 flex items-center gap-2">
+										<span class="text-[10px] text-slate-500 font-mono"
+											th:text="'#' + ${p.id}">#1</span>
+
+										<!-- Trigger Button to View Child Units -->
+										<button type="button" th:onclick="'viewPropertyUnits(' + ${p.id} + ')'"
+											class="text-[10px] font-semibold text-indigo-400 hover:text-indigo-300 bg-indigo-500/10 border border-indigo-500/20 px-2 py-0.5 rounded-full inline-flex items-center gap-1 transition">
+											<i data-lucide="layers" class="w-3 h-3"></i> View Floor Matrix
+										</button>
+									</div>
+
+									<a th:href="@{'/properties/' + ${p.id}}" target="_blank"
+										class="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 transition"
+										title="View Public Listing">
+										<i data-lucide="eye" class="w-3.5 h-3.5"></i>
+									</a>
+
+									<a th:href="@{'/admin/properties/edit/' + ${p.id}}"
+										class="p-2 rounded-xl bg-slate-800 hover:bg-indigo-600 text-slate-300 hover:text-white border border-slate-700 transition"
+										title="Edit Specifications">
+										<i data-lucide="edit-3" class="w-3.5 h-3.5"></i>
+									</a>
+
+									<a th:href="@{'/admin/properties/delete/' + ${p.id}}"
+										onclick="return confirm('Are you sure you want to delete this property record?');"
+										class="p-2 rounded-xl bg-slate-800 hover:bg-red-500/20 text-slate-400 hover:text-red-400 border border-slate-700 transition"
+										title="Delete Listing">
+										<i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+									</a>
+
+									<a th:unless="${rentedPropertyIds != null and rentedPropertyIds.contains(p.id)}"
+										th:href="@{'/admin/properties/' + ${p.id} + '/contract'}"
+										class="p-2 rounded-xl bg-slate-800 hover:bg-emerald-600 text-emerald-400 hover:text-white border border-slate-700 transition"
+										title="Create Tenancy Agreement">
+										<i data-lucide="file-plus-2" class="w-3.5 h-3.5"></i>
+									</a>
+								</div>
+							</td>
+						</tr>
+					</tbody>
+				</table>
+			</div>
+		</div>
+	</main>
+
+
+	<!-- Multi-Floor Breakdown Modal Container -->
+	<div id="unitsModal"
+		class="hidden fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4 transition-opacity">
+		<div
+			class="bg-slate-900 border border-slate-700 rounded-3xl p-6 max-w-3xl w-full max-h-[85vh] flex flex-col shadow-2xl relative">
+
+			<!-- Close Button -->
+			<button onclick="closeUnitsModal()"
+				class="absolute top-6 right-6 text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-full p-1.5 transition">
+				<i data-lucide="x" class="w-5 h-5"></i>
+			</button>
+
+			<!-- Modal Header & Instructions -->
+			<div class="pb-5 border-b border-slate-800 shrink-0">
+				<h3 class="text-lg font-bold text-white flex items-center gap-2">
+					<i data-lucide="layers" class="w-5 h-5 text-indigo-400"></i> Floor Matrix Management
+				</h3>
+				<p class="text-xs text-slate-400 mt-1.5">Review and update unit rents and occupancy statuses directly.
+					Click the save icon to apply changes instantly.</p>
+			</div>
+
+			<!-- Dynamic Content Area -->
+			<div id="unitsModalContent"
+				class="py-4 space-y-3 overflow-y-auto pr-2 flex-1 scrollbar-thin scrollbar-thumb-slate-700">
+				<!-- Injected via JavaScript -->
+			</div>
+		</div>
+	</div>
+
+	
+	
+	
+	<!-- CSV Batch Upload Modal -->
+	<div id="batchModal" class="hidden fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4 transition-opacity">
+	    <div class="bg-slate-900 border border-slate-700 rounded-3xl p-6 max-w-md w-full shadow-2xl relative">
+	        
+	        <button onclick="closeBatchModal()" class="absolute top-5 right-5 text-slate-400 hover:text-white bg-slate-800 hover:bg-slate-700 rounded-full p-1.5 transition">
+	            <i data-lucide="x" class="w-4 h-4"></i>
+	        </button>
+	        
+	        <div class="pb-4 border-b border-slate-800">
+	            <h3 class="text-lg font-bold text-white flex items-center gap-2">
+	                <i data-lucide="table" class="w-5 h-5 text-emerald-400"></i> Bulk Property Import
+	            </h3>
+	            <p class="text-xs text-slate-400 mt-1.5">Download the standard template, fill in your inventory offline, and upload it here to create multiple listings instantly.</p>
+	        </div>
+	        
+	        <div class="py-5 space-y-5">
+	            <!-- Step 1: Template Download -->
+	            <div class="flex items-center justify-between p-3 bg-slate-800/50 border border-slate-700 rounded-xl">
+	                <div class="flex items-center gap-3">
+	                    <i data-lucide="file-spreadsheet" class="w-6 h-6 text-indigo-400"></i>
+	                    <div>
+	                        <p class="text-xs font-bold text-white">1. Download Template</p>
+	                        <p class="text-[10px] text-slate-500">CSV format with required columns.</p>
+	                    </div>
+	                </div>
+	                <a href="/admin/properties/batch/template" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-lg transition">
+	                    Download
+	                </a>
+	            </div>
+
+	            <!-- Step 2: Upload Input -->
+	            <div>
+	                <p class="text-xs font-bold text-white mb-2">2. Upload Completed File</p>
+	                <input type="file" id="csvFileInput" accept=".csv" class="block w-full text-xs text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-emerald-500/10 file:text-emerald-400 hover:file:bg-emerald-500/20 cursor-pointer border border-slate-700 rounded-xl p-1" />
+	            </div>
+
+	            <!-- Error Reporting Area -->
+	            <div id="batchReportArea" class="hidden p-3 rounded-xl border text-[11px] max-h-32 overflow-y-auto space-y-1"></div>
+	        </div>
+
+	        <button id="btnUploadBatch" onclick="uploadCsvFile()" class="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs rounded-xl shadow-lg transition flex items-center justify-center gap-2">
+	            <i data-lucide="upload" class="w-4 h-4"></i> Start Import Process
+	        </button>
+	    </div>
+	</div>
+
+	<script>
+	    function openBatchModal() {
+	        document.getElementById('batchModal').classList.remove('hidden');
+	        document.getElementById('batchModal').classList.add('flex');
+	        document.getElementById('batchReportArea').classList.add('hidden');
+	        document.getElementById('csvFileInput').value = '';
+	    }
+
+	    function closeBatchModal() {
+	        document.getElementById('batchModal').classList.add('hidden');
+	        document.getElementById('batchModal').classList.remove('flex');
+	    }
+
+	    async function uploadCsvFile() {
+	        const fileInput = document.getElementById('csvFileInput');
+	        const reportArea = document.getElementById('batchReportArea');
+	        const btn = document.getElementById('btnUploadBatch');
+
+	        if (!fileInput.files.length) {
+	            alert("Please select a CSV file first.");
+	            return;
+	        }
+
+	        // Set Loading State
+	        const originalBtnHtml = btn.innerHTML;
+	        btn.innerHTML = `<div class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div> Importing...`;
+	        btn.disabled = true;
+	        btn.classList.add('opacity-75');
+
+	        const formData = new FormData();
+	        formData.append("file", fileInput.files[0]);
+
+	        try {
+	            const res = await fetch('/admin/properties/batch/upload', {
+	                method: 'POST',
+	                body: formData
+	            });
+	            
+	            const data = await res.json();
+	            reportArea.classList.remove('hidden');
+
+	            if (res.ok) {
+	                if (data.errors && data.errors.length > 0) {
+	                    reportArea.className = 'p-3 rounded-xl border border-amber-500/30 bg-amber-500/10 text-[11px] max-h-32 overflow-y-auto space-y-1 text-amber-400';
+	                    reportArea.innerHTML = `<p class="font-bold text-white mb-2">Imported ${data.successCount} properties. Some rows failed:</p>` + 
+	                                           data.errors.map(err => `<p>• ${err}</p>`).join('');
+	                } else {
+	                    reportArea.className = 'p-3 rounded-xl border border-emerald-500/30 bg-emerald-500/10 text-[11px] text-emerald-400 font-medium text-center';
+	                    reportArea.innerHTML = `<i data-lucide="check-circle" class="w-6 h-6 mx-auto mb-1"></i> Successfully imported ${data.successCount} properties! Reloading...`;
+	                    setTimeout(() => window.location.reload(), 2000);
+	                }
+	            } else {
+	                reportArea.className = 'p-3 rounded-xl border border-rose-500/30 bg-rose-500/10 text-[11px] text-rose-400 font-medium';
+	                reportArea.innerHTML = `Error: ${data.error || 'Upload failed.'}`;
+	            }
+	        } catch (e) {
+	            alert("Network error occurred.");
+	        } finally {
+	            btn.innerHTML = originalBtnHtml;
+	            btn.disabled = false;
+	            btn.classList.remove('opacity-75');
+	            lucide.createIcons();
+	        }
+	    }
+	</script>
+	
+	
+	
+	
+	<script>
+		async function viewPropertyUnits(propertyId) {
+			const modal = document.getElementById('unitsModal');
+			if (!modal) return;
+			const container = document.getElementById('unitsModalContent');
+			modal.classList.remove('hidden');
+			modal.classList.add('flex');
+
+			// Loading State
+			container.innerHTML = `
+						<div class="flex flex-col items-center justify-center py-16">
+							<div class="w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
+							<p class="text-xs text-slate-400 mt-4 font-medium">Loading unit matrix...</p>
+						</div>`;
+
+			try {
+				const res = await fetch(`/admin/properties/${propertyId}/units`, {credentials: 'same-origin'});
+				if (res.ok) {
+					const units = await res.json();
+					if (!units || units.length === 0) {
+						container.innerHTML = `
+									<div class="py-12 text-center">
+										<i data-lucide="box-select" class="w-10 h-10 text-slate-600 mx-auto mb-3"></i>
+										<p class="text-sm font-semibold text-white">No child units found</p>
+										<p class="text-xs text-slate-500 mt-1">Generate them from the edit page.</p>
+									</div>`;
+						lucide.createIcons();
+						return;
+					}
+
+					// Render the Interactive List
+					// Replace your existing container.innerHTML assignment inside viewPropertyUnits() with this:
+
+					container.innerHTML = `
+					    <!-- Sticky Search Bar for Units -->
+					    <div class="sticky top-0 bg-slate-900 pb-4 z-10">
+					        <div class="relative w-full">
+					            <i data-lucide="search" class="w-4 h-4 text-slate-500 absolute left-3.5 top-1/2 -translate-y-1/2"></i>
+					            <input type="text" id="unitSearchInput" onkeyup="filterUnits()" 
+					                   placeholder="Search by unit number or floor..." 
+					                   class="w-full pl-10 pr-4 py-2.5 text-xs bg-slate-800 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition shadow-lg shadow-slate-950/50" />
+					        </div>
+					    </div>
+
+					    <!-- Unit List Wrapper -->
+					    <div class="space-y-3 pb-2">
+					        ${units.map(u => `
+					            <div class="unit-row group flex flex-col xl:flex-row xl:items-center justify-between p-4 bg-slate-800/40 hover:bg-slate-800/80 border border-slate-700/50 hover:border-slate-600 rounded-2xl text-xs gap-4 transition-all" 
+					                 data-search-term="${(u.unitNumber + ' ' + u.unitName + ' ' + u.floorNumber).toLowerCase()}">
+					                
+					                <!-- Unit Name & Floor Badge -->
+					                <div class="flex-1">
+					                    <div class="flex items-center gap-2 mb-1.5">
+					                        <span class="font-bold text-white text-sm">${u.unitNumber || u.unitName.split('—').pop().trim()}</span>
+					                        <span class="px-2 py-0.5 rounded-md bg-slate-700/50 text-[10px] font-semibold text-slate-300 border border-slate-600/50">${u.floorNumber}</span>
+					                    </div>
+					                    <span class="text-[10px] text-slate-500 line-clamp-1">${u.unitName}</span>
+					                </div>
+					                
+					                <!-- Inline Edit Controls -->
+					                <div class="flex flex-wrap sm:flex-nowrap items-center gap-2 shrink-0 bg-slate-900/50 p-2 rounded-xl border border-slate-700/50">
+					                    
+					                    <!-- Rent Input Field -->
+					                    <div class="flex items-center gap-1 px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg focus-within:border-indigo-500 focus-within:ring-1 focus-within:ring-indigo-500 transition-all">
+					                        <span class="text-slate-400 font-medium">₹</span>
+					                        <input type="number" id="rent-${u.id}" value="${u.rentInr}" 
+					                               class="w-16 bg-transparent text-white font-mono text-sm focus:outline-none" placeholder="Rent" />
+					                    </div>
+					                    
+					                    <!-- Status Dropdown -->
+					                    <select id="status-${u.id}" class="px-2 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-[11px] font-bold focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 cursor-pointer appearance-none text-center transition-colors
+					                        ${u.status === 'VACANT' ? 'text-emerald-400' : (u.status === 'RENTED_OUT' ? 'text-indigo-400' : 'text-amber-400')}">
+					                        <option value="VACANT" class="text-emerald-400" ${u.status === 'VACANT' ? 'selected' : ''}>VACANT</option>
+					                        <option value="RENTED_OUT" class="text-indigo-400" ${u.status === 'RENTED_OUT' ? 'selected' : ''}>RENTED</option>
+					                        <option value="MAINTENANCE" class="text-amber-400" ${u.status === 'MAINTENANCE' ? 'selected' : ''}>MAINTENANCE</option>
+					                    </select>
+
+					                    <!-- ACTION BUTTONS: Save, View, Edit -->
+					                    <div class="flex items-center gap-1.5 border-l border-slate-700 pl-2 ml-1">
+					                        <!-- Quick Save -->
+					                        <button onclick="updateUnit(${u.id}, this)" class="w-8 h-8 flex items-center justify-center bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors shadow-md shadow-indigo-500/20" title="Quick Save">
+					                            <i data-lucide="save" class="w-4 h-4"></i>
+					                        </button>
+					                        
+					                        <!-- NEW: View Public Unit Details -->
+					                        <a href="/admin/properties/units/${u.id}" target="_blank" class="w-8 h-8 flex items-center justify-center bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg transition-colors border border-slate-700" title="View Public Page">
+					                            <i data-lucide="eye" class="w-4 h-4"></i>
+					                        </a>
+
+					                        <!-- Advanced Edit -->
+					                        <a href="/admin/properties/units/${u.id}/edit" class="w-8 h-8 flex items-center justify-center bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg transition-colors border border-slate-700" title="Advanced Edit">
+					                            <i data-lucide="settings-2" class="w-4 h-4"></i>
+					                        </a>
+					                    </div>
+					                </div>
+					            </div>
+					        `).join('')}
+					    </div>
+					`;
+					lucide.createIcons();
+
+					// Attach dynamic color-changing listener to dropdowns
+					units.forEach(u => {
+						const sel = document.getElementById(`status-${u.id}`);
+						if (sel) {
+							sel.addEventListener('change', (e) => {
+								sel.className = sel.className.replace(/text-(emerald|indigo|amber)-400/g, '');
+								if (e.target.value === 'VACANT') sel.classList.add('text-emerald-400');
+								if (e.target.value === 'RENTED_OUT') sel.classList.add('text-indigo-400');
+								if (e.target.value === 'MAINTENANCE') sel.classList.add('text-amber-400');
+
+
+							});
+						}
+					});
+				}
+			} catch (e) {
+				container.innerHTML = `<div class="py-12 text-center text-rose-400"><i data-lucide="alert-circle" class="w-8 h-8 mx-auto mb-3 opacity-50"></i><p class="text-xs">Failed to load unit matrix.</p></div>`;
+				lucide.createIcons();
+			}
+		}
+		
+		
+		function filterUnits() {
+		    const query = document.getElementById('unitSearchInput').value.toLowerCase();
+		    const rows = document.querySelectorAll('.unit-row');
+		    
+		    rows.forEach(row => {
+		        // Read the searchable string we embedded in the data-search-term attribute
+		        const searchTerm = row.getAttribute('data-search-term');
+		        
+		        if (searchTerm.includes(query)) {
+		            row.style.display = '';
+		        } else {
+		            row.style.display = 'none';
+		        }
+		    });
+		}
+
+		async function updateUnit(unitId, btnElement) {
+			const rentVal = document.getElementById(`rent-${unitId}`).value;
+			const statusVal = document.getElementById(`status-${unitId}`).value;
+
+			// Store original icon and set spinner
+			const originalHtml = btnElement.innerHTML;
+			btnElement.innerHTML = `<div class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>`;
+			btnElement.classList.add('opacity-75', 'pointer-events-none');
+
+			const formData = new URLSearchParams();
+			formData.append("rentInr", rentVal);
+			formData.append("status", statusVal);
+
+			try {
+				const res = await fetch(`/admin/properties/units/${unitId}/update`, {
+					method: 'POST',
+					body: formData
+				});
+
+				if (res.ok) {
+					// Inline Success UI (Turns Green with Checkmark)
+					btnElement.innerHTML = `<i data-lucide="check" class="w-5 h-5"></i>`;
+					btnElement.classList.replace('bg-indigo-600', 'bg-emerald-500');
+					btnElement.classList.replace('hover:bg-indigo-500', 'hover:bg-emerald-400');
+					lucide.createIcons();
+
+					// Revert button back to normal after 2 seconds
+					setTimeout(() => {
+						btnElement.innerHTML = originalHtml;
+						btnElement.classList.replace('bg-emerald-500', 'bg-indigo-600');
+						btnElement.classList.replace('hover:bg-emerald-400', 'hover:bg-indigo-500');
+						btnElement.classList.remove('opacity-75', 'pointer-events-none');
+						lucide.createIcons();
+					}, 2000);
+				} else {
+					alert("Failed to update unit. Please verify permissions.");
+					btnElement.innerHTML = originalHtml;
+					btnElement.classList.remove('opacity-75', 'pointer-events-none');
+				}
+			} catch (e) {
+				console.error(e);
+				alert("Network error. Please try again.");
+				btnElement.innerHTML = originalHtml;
+				btnElement.classList.remove('opacity-75', 'pointer-events-none');
+			}
+		}
+
+		function closeUnitsModal() {
+			const modal = document.getElementById('unitsModal');
+			if (modal) {
+				modal.classList.add('hidden');
+				modal.classList.remove('flex');
+			}
+		}
+
+		// Safe binding for outside background click
+		const modalEl = document.getElementById('unitsModal');
+		if (modalEl) {
+			modalEl.addEventListener('click', (e) => {
+				if (e.target.id === 'unitsModal') closeUnitsModal();
+			});
+		}
+	</script>
+	<footer class="border-t border-slate-800/80 py-6 text-center text-xs text-slate-500">
+		<p>Smart Property Automation & Broker Portal</p>
+	</footer>
+
+	<!-- Include Common Header Scripts Fragment -->
+	<div th:replace="~{fragments/header :: navScripts}"></div>
+
+	<script>
+		let currentTab = 'ALL';
+
+		function calculateInventoryStats() {
+			const rows = document.querySelectorAll('.property-row');
+			let activeCount = 0;
+			let totalRent = 0;
+
+			rows.forEach(r => {
+				const isActive = r.getAttribute('data-active') === 'true';
+				const price = Number(r.getAttribute('data-price') || 0);
+				if (isActive) {
+					activeCount++;
+					totalRent += price;
+				}
+			});
+
+			const activeBadge = document.getElementById('stat-active-count');
+			const totalRentBadge = document.getElementById('stat-total-rent');
+
+			if (activeBadge) activeBadge.innerText = activeCount;
+			if (totalRentBadge) totalRentBadge.innerText = totalRent.toLocaleString('en-IN');
+		}
+
+
+
+		let currentStatus = 'ALL'; // ALL, ACTIVE, INACTIVE
+		let currentType = 'ALL';   // ALL, STANDALONE, MULTI
+
+		function setStatusFilter(status) {
+			currentStatus = status;
+			updateButtonStyles('status', status, ['all', 'active', 'inactive'], 'bg-indigo-600');
+			filterProperties();
+		}
+
+		function setTypeFilter(type) {
+			currentType = type;
+			updateButtonStyles('type', type, ['all', 'standalone', 'multi'], 'bg-emerald-600');
+			filterProperties();
+		}
+
+		function updateButtonStyles(category, activeValue, options, activeColorClass) {
+			options.forEach(opt => {
+				const btn = document.getElementById(`filter-${category}-${opt}`);
+				if (btn) {
+					if (opt === activeValue.toLowerCase()) {
+						btn.className = `px-3 py-1 rounded-lg font-semibold ${activeColorClass} text-white transition`;
+					} else {
+						btn.className = 'px-3 py-1 rounded-lg font-semibold text-slate-400 hover:text-white transition';
+					}
+				}
+			});
+		}
+
+		function filterProperties() {
+			const input = document.getElementById('tableSearch');
+			const filterText = input ? input.value.toLowerCase() : '';
+			const rows = document.querySelectorAll('.property-row');
+
+			let visibleCount = 0;
+
+			rows.forEach(row => {
+				const isActive = row.getAttribute('data-active') === 'true';
+				const isMulti = row.getAttribute('data-multi') === 'true';
+
+				const titleTd = row.getElementsByTagName('td')[0];
+				const locationTd = row.getElementsByTagName('td')[3];
+
+				const textMatch = !filterText ||
+					(titleTd && titleTd.textContent.toLowerCase().includes(filterText)) ||
+					(locationTd && locationTd.textContent.toLowerCase().includes(filterText));
+
+				let statusMatch = true;
+				if (currentStatus === 'ACTIVE') statusMatch = isActive;
+				if (currentStatus === 'INACTIVE') statusMatch = !isActive;
+
+				let typeMatch = true;
+				if (currentType === 'STANDALONE') typeMatch = !isMulti;
+				if (currentType === 'MULTI') typeMatch = isMulti;
+
+				if (textMatch && statusMatch && typeMatch) {
+					row.style.display = '';
+					visibleCount++;
+				} else {
+					row.style.display = 'none';
+				}
+			});
+
+			// Optional: Update record count text if you have a badge for it
+			const emptyRow = document.getElementById('emptyRow');
+			if (emptyRow) {
+				emptyRow.style.display = visibleCount === 0 ? '' : 'none';
+			}
+		}
+
+		function copyListingUrl(button) {
+			const relativeUrl = button.getAttribute('data-url');
+			const fullUrl = window.location.origin + relativeUrl;
+			navigator.clipboard.writeText(fullUrl).then(() => {
+				const originalText = button.innerHTML;
+				button.innerHTML = `<i data-lucide="check" class="w-2.5 h-2.5 text-emerald-400"></i> Copied!`;
+				lucide.createIcons();
+				setTimeout(() => {
+					button.innerHTML = originalText;
+					lucide.createIcons();
+				}, 2000);
+			});
+		}
+		
+		
+		
+
+		document.addEventListener('DOMContentLoaded', () => {
+			syncNavState();
+			calculateInventoryStats();
+			lucide.createIcons();
+		});
+	</script>
 </body>
+
 </html>

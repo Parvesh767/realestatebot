@@ -5,6 +5,7 @@ public enum LeadSource {
 	WHATSAPP_AUTOMATION,
 	MANUAL,
 	PHONE_CALL,
-	REFERRAL
+	REFERRAL,
+	 WEB,
 	
 }

@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title th:text="${(property.title != null ? property.title : (property.bhk + ' in ' + property.localityCode)) + ' — Property Hub'}">Property Details</title>
+  
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    /* Hide scrollbar for smooth carousel */
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen antialiased flex flex-col justify-between selection:bg-indigo-500 selection:text-white pb-20 sm:pb-0">
+
+  <!-- Header with Compact Search Bar -->
+  <header class="border-b border-slate-800 bg-slate-900/90 sticky top-0 z-50 backdrop-blur-md">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
+      <a href="/search" class="flex items-center gap-2.5 shrink-0">
+        <div class="h-9 w-9 rounded-xl bg-indigo-600 flex items-center justify-center text-white shadow-lg shadow-indigo-600/30">
+          <i data-lucide="home" class="w-5 h-5"></i>
+        </div>
+        <span class="font-bold text-base text-white tracking-tight hidden sm:inline">Property Hub</span>
+      </a>
+
+      <!-- Quick Inline Search -->
+      <form th:action="@{/search/results}" method="post" class="flex-1 max-w-lg">
+        <div class="relative w-full">
+          <input type="text" name="query" 
+                 th:placeholder="'Search other homes in ' + ${property.localityCode != null ? property.localityCode : 'Gurgaon'} + '...'"
+                 class="w-full pl-9 pr-20 py-2 bg-slate-800/90 border border-slate-700 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+          <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
+          <button type="submit" class="absolute right-1.5 top-1/2 -translate-y-1/2 px-2.5 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-[11px] font-semibold transition">
+            Search
+          </button>
+        </div>
+      </form>
+
+      <div class="flex items-center gap-2 shrink-0">
+        <a href="/search" class="text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-2 rounded-xl border border-slate-700 hidden md:flex items-center gap-1.5">
+          <i data-lucide="arrow-left" class="w-3.5 h-3.5"></i> Results
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content Layout -->
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 py-6 w-full space-y-8">
+    
+    <!-- Success Banner -->
+    <div th:if="${inquirySuccess}" class="p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-2xl flex items-center gap-3 text-emerald-400 text-xs font-medium">
+      <i data-lucide="check-circle" class="w-5 h-5 shrink-0"></i>
+      <span>Inquiry sent! The property manager will reach out shortly via WhatsApp.</span>
+    </div>
+
+    <!-- Title & Quick Switch Row -->
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-800">
+      <div>
+        <div class="flex flex-wrap items-center gap-2 mb-2">
+          <span class="text-xs font-bold px-2.5 py-0.5 rounded-lg bg-indigo-500/10 text-indigo-400 border border-indigo-500/20"
+                th:text="${property.bhk}">2 BHK</span>
+          <span class="text-xs font-medium px-2.5 py-0.5 rounded-lg bg-slate-800 text-slate-300 border border-slate-700"
+                th:text="${property.furnishing != null ? property.furnishing : 'Semi-Furnished'}">Semi-Furnished</span>
+          <span class="text-xs font-medium px-2.5 py-0.5 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+            Verified
+          </span>
+        </div>
+        <h1 class="text-2xl sm:text-3xl font-extrabold text-white" th:text="${property.title}">Luxury 2BHK Apartment</h1>
+        <p class="text-xs text-slate-400 mt-1 flex items-center gap-1.5">
+          <i data-lucide="map-pin" class="w-3.5 h-3.5 text-indigo-400 shrink-0"></i>
+          <span th:text="${(property.localityCode != null ? property.localityCode : '') + (property.cityCode != null ? ', ' + property.cityCode : '')}">Sector 49, Gurgaon</span>
+        </p>
+      </div>
+
+      <div class="flex flex-col md:items-end">
+        <span class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Monthly Rent</span>
+        <div class="text-3xl font-black text-emerald-400 font-mono">
+          ₹ <span th:text="${property.price != null ? #numbers.formatInteger(property.price, 0, 'COMMA') : '0'}">0</span>
+        </div>
+        <span class="text-[11px] text-slate-500" th:if="${property.securityDeposit != null}">
+          Deposit: ₹ <span th:text="${#numbers.formatInteger(property.securityDeposit, 0, 'COMMA')}">0</span>
+        </span>
+      </div>
+    </div>
+
+    <!-- 2 Column Workspace: Specs + Sticky Form -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      
+      <!-- Left 2 Cols: Main Media & Specs -->
+      <div class="lg:col-span-2 space-y-6">
+        
+        <!-- Photo Gallery Carousel -->
+        <div class="bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden shadow-xl">
+          <div class="h-80 sm:h-96 w-full bg-slate-950 relative">
+            <img id="main-gallery-img" 
+                 th:src="${property.photos != null and !property.photos.empty ? property.photos[0] : 'https://placehold.co/800x500/0f172a/94a3b8?text=No+Photo+Uploaded'}" 
+                 class="w-full h-full object-cover transition duration-300" 
+                 onerror="this.src='https://placehold.co/800x500/0f172a/94a3b8?text=No+Photo+Uploaded'" />
+          </div>
+
+          <!-- Thumbnails -->
+          <div th:if="${property.photos != null and #lists.size(property.photos) > 1}" 
+               class="p-3 flex gap-2 overflow-x-auto bg-slate-900/90 border-t border-slate-800 no-scrollbar">
+            <img th:each="photo : ${property.photos}" 
+                 th:src="${photo}" 
+                 th:data-src="${photo}"
+                 onclick="switchPhoto(this.getAttribute('data-src'))"
+                 class="h-16 w-24 object-cover rounded-xl border border-slate-700 hover:border-indigo-500 cursor-pointer shrink-0 transition" />
+          </div>
+        </div>
+
+        <!-- Specifications & Overview -->
+        <div class="bg-slate-900/60 border border-slate-800 rounded-3xl p-6 space-y-5">
+          <h3 class="text-sm font-bold uppercase tracking-wider text-slate-400">Overview & Key Specs</h3>
+          
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div class="p-3.5 bg-slate-800/40 rounded-2xl border border-slate-700/50">
+              <span class="text-[10px] uppercase font-bold text-slate-500 block">Configuration</span>
+              <span class="text-xs font-bold text-slate-200" th:text="${property.bhk}">2 BHK</span>
+            </div>
+            <div class="p-3.5 bg-slate-800/40 rounded-2xl border border-slate-700/50">
+              <span class="text-[10px] uppercase font-bold text-slate-500 block">Property Type</span>
+              <span class="text-xs font-bold text-slate-200" th:text="${property.propertyType != null ? property.propertyType : 'Apartment'}">Apartment</span>
+            </div>
+            <div class="p-3.5 bg-slate-800/40 rounded-2xl border border-slate-700/50">
+              <span class="text-[10px] uppercase font-bold text-slate-500 block">Floor Number</span>
+              <span class="text-xs font-bold text-slate-200" th:text="${property.floorNumber != null ? property.floorNumber + ' Floor' : 'Middle Floor'}">2nd Floor</span>
+            </div>
+            <div class="p-3.5 bg-slate-800/40 rounded-2xl border border-slate-700/50">
+              <span class="text-[10px] uppercase font-bold text-slate-500 block">Furnishing</span>
+              <span class="text-xs font-bold text-emerald-400" th:text="${property.furnishing != null ? property.furnishing : 'Semi-Furnished'}">Semi-Furnished</span>
+            </div>
+          </div>
+
+          <!-- Description -->
+          <div class="space-y-2 pt-2">
+            <h4 class="text-xs font-bold uppercase tracking-wider text-slate-400">Description</h4>
+            <p class="text-xs text-slate-300 leading-relaxed" 
+               th:text="${property.description != null and !property.description.isBlank() ? property.description : 'Spacious home with prime accessibility, ventilated balconies, and verified owner listing.'}">
+              Spacious home with prime accessibility.
+            </p>
+          </div>
+
+          <!-- Amenities -->
+          <div th:if="${property.amenities != null and !property.amenities.empty}" class="space-y-3 pt-2">
+            <h4 class="text-xs font-bold uppercase tracking-wider text-slate-400">Amenities & Facilities</h4>
+            <div class="flex flex-wrap gap-2">
+              <div th:each="am : ${property.amenities}" 
+                   class="px-3 py-1.5 rounded-xl bg-slate-800 border border-slate-700 text-slate-300 text-xs flex items-center gap-1.5">
+                <i data-lucide="check-circle-2" class="w-3.5 h-3.5 text-emerald-400"></i>
+                <span th:text="${am}">Amenity</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Video & Map Row -->
+          <div class="flex flex-wrap items-center gap-3 pt-2">
+            <a th:if="${property.videoTourUrl != null and !property.videoTourUrl.isBlank()}" 
+               th:href="${property.videoTourUrl}" target="_blank" 
+               class="inline-flex items-center gap-2 px-4 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-xl text-xs font-bold border border-red-500/30 transition">
+              <i data-lucide="video" class="w-4 h-4"></i> Watch Video Tour
+            </a>
+
+            <a th:if="${property.mapLink != null and !property.mapLink.isBlank()}" 
+               th:href="${property.mapLink}" target="_blank" 
+               class="inline-flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-indigo-400 rounded-xl text-xs font-semibold border border-slate-700 transition">
+              <i data-lucide="map" class="w-3.5 h-3.5"></i> Open in Google Maps
+            </a>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Right 1 Col: Sticky Inquiry & Site Visit Card -->
+      <div class="space-y-6">
+        <div class="bg-slate-900 border border-slate-800 rounded-3xl p-6 space-y-6 shadow-xl sticky top-24">
+          <div>
+            <h2 class="text-base font-bold text-white">Book Site Visit / Inquire</h2>
+            <p class="text-xs text-slate-400 mt-1">Specify your move-in urgency to receive a priority response.</p>
+          </div>
+
+          <form method="post" th:action="@{/properties/inquire}" class="space-y-4">
+            <input type="hidden" name="propertyId" th:value="${property.id}" />
+
+            <div class="space-y-1.5">
+              <label class="block text-[11px] font-bold uppercase tracking-wider text-slate-400">WhatsApp Phone *</label>
+              <input type="tel" name="phone" placeholder="e.g. 919876543210" required 
+                     class="w-full px-4 py-3 bg-slate-800/80 border border-slate-700 rounded-xl text-white text-xs placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            </div>
+
+            <div class="space-y-1.5">
+              <label class="block text-[11px] font-bold uppercase tracking-wider text-slate-400">Move-in Urgency</label>
+              <div class="grid grid-cols-3 gap-2 text-xs">
+                <label class="cursor-pointer">
+                  <input type="radio" name="moveInDays" value="3" class="peer sr-only" />
+                  <div class="p-2 text-center rounded-xl bg-slate-800 border border-slate-700 peer-checked:bg-indigo-600 peer-checked:border-indigo-500 peer-checked:text-white text-slate-300 transition text-[11px] font-semibold">
+                    &lt; 3 Days
+                  </div>
+                </label>
+                <label class="cursor-pointer">
+                  <input type="radio" name="moveInDays" value="7" checked class="peer sr-only" />
+                  <div class="p-2 text-center rounded-xl bg-slate-800 border border-slate-700 peer-checked:bg-indigo-600 peer-checked:border-indigo-500 peer-checked:text-white text-slate-300 transition text-[11px] font-semibold">
+                    7 Days
+                  </div>
+                </label>
+                <label class="cursor-pointer">
+                  <input type="radio" name="moveInDays" value="15" class="peer sr-only" />
+                  <div class="p-2 text-center rounded-xl bg-slate-800 border border-slate-700 peer-checked:bg-indigo-600 peer-checked:border-indigo-500 peer-checked:text-white text-slate-300 transition text-[11px] font-semibold">
+                    15+ Days
+                  </div>
+                </label>
+              </div>
+            </div>
+
+            <div class="space-y-1.5">
+              <label class="block text-[11px] font-bold uppercase tracking-wider text-slate-400">Preferred Visit Date</label>
+              <input type="date" name="visitDate" 
+                     class="w-full px-4 py-3 bg-slate-800/80 border border-slate-700 rounded-xl text-white text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+            </div>
+
+            <button type="submit" class="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs rounded-xl shadow-lg shadow-indigo-600/30 transition flex items-center justify-center gap-2">
+              <i data-lucide="calendar-check" class="w-4 h-4"></i> Schedule Visit
+            </button>
+          </form>
+
+          <div class="relative flex items-center justify-center border-t border-slate-800 pt-4">
+            <span class="text-[10px] uppercase text-slate-500 px-2 bg-slate-900">or connect via bot</span>
+          </div>
+
+          <!-- Routes to Central Business Bot with Inbound Structured Query Reference -->
+          <a th:href="'https://wa.me/' + ${@environment.getProperty('whatsapp.business.phone','918847084526')} + '?text=' + ${#uris.escapeQueryParam('INQUIRE ' + property.id + ' — I want to book a visit for ' + property.bhk + ' in ' + (property.localityCode != null ? property.localityCode : 'Gurgaon'))}"
+             target="_blank"
+             class="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs rounded-xl shadow-lg shadow-emerald-600/20 transition flex items-center justify-center gap-2">
+            <i data-lucide="message-circle" class="w-4 h-4"></i> Chat on WhatsApp
+          </a>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- 🔥 SECTION: "Similar Homes You Might Like" -->
+    <div th:if="${similarProperties != null and !similarProperties.empty}" class="pt-8 border-t border-slate-800 space-y-4">
+      <div class="flex items-center justify-between">
+        <div>
+          <h3 class="text-lg font-bold text-white">Similar Properties in this Area</h3>
+          <p class="text-xs text-slate-400">Explore alternate homes without going back</p>
+        </div>
+        <span class="text-xs text-indigo-400 font-semibold" th:text="${#lists.size(similarProperties)} + ' Options Available'">0 Options</span>
+      </div>
+
+      <!-- Horizontal Cards Slider -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+        <div th:each="sim : ${similarProperties}" class="bg-slate-900 border border-slate-800 hover:border-slate-700 rounded-2xl overflow-hidden flex flex-col justify-between transition hover:-translate-y-1 shadow-md group">
+          <div class="relative h-36 bg-slate-800">
+            <img th:src="${sim.photos != null and !sim.photos.empty ? sim.photos[0] : 'https://placehold.co/400x250/0f172a/94a3b8?text=Property'}" 
+                 class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+            <span class="absolute top-2 left-2 bg-slate-950/80 text-white text-[10px] font-bold px-2 py-0.5 rounded"
+                  th:text="${sim.bhk}">2 BHK</span>
+            <span class="absolute bottom-2 right-2 bg-emerald-500 text-slate-950 text-[11px] font-extrabold px-2 py-0.5 rounded">
+              ₹ <span th:text="${#numbers.formatInteger(sim.price, 0, 'COMMA')}">0</span>
+            </span>
+          </div>
+
+          <div class="p-3.5 space-y-2 flex-1 flex flex-col justify-between">
+            <div>
+              <h4 class="text-xs font-bold text-white line-clamp-1 group-hover:text-indigo-400 transition" 
+                  th:text="${sim.title != null ? sim.title : (sim.bhk + ' in ' + sim.localityCode)}">Title</h4>
+              <p class="text-[11px] text-slate-400 flex items-center gap-1 mt-0.5">
+                <i data-lucide="map-pin" class="w-3.5 h-3.5 text-indigo-400"></i>
+                <span th:text="${sim.localityCode}">SEC49</span>
+              </p>
+            </div>
+
+            <!-- Instant One-Click Jump -->
+            <a th:href="@{'/properties/' + ${sim.id}}" 
+               class="w-full py-1.5 text-center bg-slate-800 hover:bg-indigo-600 text-slate-200 hover:text-white rounded-lg text-xs font-semibold border border-slate-700 transition block">
+              View Listing &rarr;
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <footer class="border-t border-slate-800/80 py-6 text-center text-xs text-slate-500">
+    <p>Smart Property Automation & Matching Engine</p>
+  </footer>
+
+  <script>
+    function switchPhoto(src) {
+      if (src) {
+        document.getElementById('main-gallery-img').src = src;
+      }
+    }
+    lucide.createIcons();
+  </script>
+</body>
+</html>

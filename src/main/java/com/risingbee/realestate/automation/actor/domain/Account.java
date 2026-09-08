@@ -58,6 +58,15 @@ public class Account {
     boolean profileStage;
 
     
+ // Inside your Account entity class
+    @Column(name = "upi_id")
+    private String upiId;
+
+    // Getters and Setters
+    public String getUpiId() { return upiId; }
+    public void setUpiId(String upiId) { this.upiId = upiId; }
+    
+    
  // Inside Account.java entity
     @Column(name = "credits_balance", nullable = false)
     private Integer creditsBalance = 10; // 10 free credits upon onboarding
